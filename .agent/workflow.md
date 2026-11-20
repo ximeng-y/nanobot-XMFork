@@ -1,5 +1,5 @@
-# Reusing verification evidence
+# 复用验证证据
 
-After a content or base change, rerun checks whose supporting assumptions changed or whose relevance is uncertain. Unrelated changes do not require repeating all verification or review. Carry evidence forward with the intervening diff, the contract it proved, and the reason that contract is unaffected. Consider shared dependencies and configuration, not just overlapping files.
+内容或基线发生变化后，重新运行那些所依据的假设已改变或适用性不再确定的检查。无关的更改不要求重复全部验证或审查。沿用证据时，要同时附上此间的差异、该证据证明的约定，以及该约定不受影响的原因。考虑共享的依赖和配置，而不只是重叠的文件。
 
-Evaluate PR review and required CI against the current remote head. Inherited evidence retains its original identity and an explanation of its applicability; it is not a fresh execution. Keep raw verification artifacts outside tracked source files.
+PR 审查和必需的 CI 应基于当前远端最新提交进行评估。沿用的证据保留其原始身份，并说明其适用性；这不代表重新执行。原始验证产物应放在受版本控制的源文件之外。

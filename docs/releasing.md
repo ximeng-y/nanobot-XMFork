@@ -1,92 +1,92 @@
-# Release checklist
+# 发布检查清单
 
-Use this checklist with the [Release Packaging Contract](../CONTRIBUTING.md#release-packaging-contract). Preparation does not authorize publication. Pushing tags, publishing GitHub Releases, uploading to PyPI and deploying documentation are separate operations.
+请将本检查清单与[发布打包约定](../CONTRIBUTING.md#release-packaging-contract)配合使用。准备工作不代表已获准发布。推送标签、发布 GitHub Release、上传到 PyPI 和部署文档均为独立操作。
 
-## Release cadence
+## 发布节奏
 
-Stable is the default feed; Preview is opt-in. Both use one update flow and require confirmation before installation. Neither a faster cadence nor a subscription permits stopping tasks or restarting a gateway automatically. See [Updating nanobot](./updating.md) for user instructions.
+Stable 是默认更新源，Preview 需要主动订阅。两者共用同一套更新流程，安装前都必须确认。发布节奏再快、用户是否订阅，都不允许自动停止任务或重启网关。用户操作说明请参阅[更新 nanobot](./updating.md)。
 
-| Release | Trigger | Public destination | Documentation |
+| 发布类型 | 触发方式 | 公开目的地 | 文档 |
 | --- | --- | --- | --- |
-| Stable feature release | Manual, when needed | Final GitHub Release and PyPI; also index its manifest for Preview subscribers | Full version documentation and any planned announcement |
-| Stable patch | Manual, when a reviewed fix is ready; do not wait for a feature milestone | Same stable destinations and checks | Generated change notes and necessary upgrade instructions; update only affected documentation |
-| Preview / dev | Daily workflow, after maintainers enable it | GitHub prerelease and protected `release-index` catalogue; not PyPI | Generated change notes; no new documentation edition for each build |
+| Stable 功能版本 | 需要时手动触发 | 正式 GitHub Release 和 PyPI；还要将其清单加入索引，供 Preview 订阅者使用 | 完整的版本文档及计划发布的公告 |
+| Stable 补丁 | 修复通过评审后手动触发；不必等待功能版本里程碑 | 与 Stable 相同的目的地和检查 | 生成的变更说明及必要的升级指引；只更新受影响的文档 |
+| Preview / dev | 维护者启用后，由每日工作流触发 | GitHub 预发布和受保护的 `release-index` 目录；不发布到 PyPI | 生成的变更说明；不为每次构建制作新版文档 |
 
-These are three publication lines, not three build systems. Feature and patch releases both use `channel=stable`; dev uses the existing `preview` channel. A patch does not require a Preview first or a complete wiki and promotional refresh. Preserve necessary tests and release checks, and reuse unaffected evidence under the [verification guidance](../.agent/workflow.md).
+这是三条发布线，不是三套构建系统。功能版本和补丁版本都使用 `channel=stable`；dev 使用现有的 `preview` 通道。发布补丁前不需要先发 Preview，也不需要全面更新 Wiki 和宣传内容。必要的测试和发布检查必须保留；未受影响的验证证据可按照[验证指南](../.agent/workflow.md)复用。
 
-Implementation status: **Verify Release Candidate** supports manual preparation and opt-in daily Preview preparation. It generates draft notes and reuses the same five-platform build and acceptance jobs. It does not publish. Automatic prerelease upload, signing handoff and catalogue advancement are not connected yet; PyPI publication requires a separate manual workflow after its trusted publisher is configured. Daily preparation is disabled by default. Do not describe this first step as an available daily public release channel.
+实现状态：**Verify Release Candidate** 支持手动准备和选择启用的每日 Preview 准备。它生成说明草稿，并复用相同的五平台构建与验收任务，不执行发布。自动预发布上传、签名交接和目录推进尚未接通；配置可信发布者后，PyPI 发布还需要单独的手动工作流。每日准备默认关闭。不要把这第一步描述成已可用的每日公开发布通道。
 
-Record the requested channel, exact source and candidate identity. Unchanged source, failed checks, missing assets, incomplete acceptance or absent approval leaves the last verified release in place. Scheduled execution can be delayed; there is no promise of a new release every day. Acceptance must cover the supported stable baseline and an earlier Preview, including skipped previews, not just the previous build.
+记录请求的通道、准确的源代码和候选版本标识。源代码未变、检查失败、资产缺失、验收不完整或未获批准时，均保留上一次通过验证的发布。计划任务可能延迟执行，不保证每天都有新版本。验收必须覆盖受支持的 Stable 基线和较早的 Preview（包括跨过的 Preview），不能只检查上一个构建。
 
-### Shared preparation entry
+### 共用的准备入口
 
-Run **Verify Release Candidate** at the chosen source ref with the existing `next_stable`, `channel` and optional `retain_installable` inputs. Both Stable release sizes use the same entry. The workflow generates `release-notes.md` from commit subjects and includes it in candidate reports and an explicitly retained installable handoff. Review necessary upgrade instructions and security wording before publication. These notes are local artifacts, not a GitHub Release, including a draft Release.
+在选定的源代码 ref 上运行 **Verify Release Candidate**，使用现有的 `next_stable`、`channel` 和可选的 `retain_installable` 输入。两种 Stable 发布都使用这个入口。工作流根据提交标题生成 `release-notes.md`，并将其纳入候选报告和明确要求保留的可安装交接包。发布前检查必要的升级说明和安全措辞。这些说明是本地工件，不是 GitHub Release，草稿 Release 也不算。
 
-Stable notes start at the preceding final release on the selected source line, ignoring Preview tags. Preview notes can start at the preceding Preview's source. Neither uses an unrelated branch's newest tag. The planned source is the event SHA throughout the run; preparation does not follow a moving branch.
+Stable 说明从所选源代码线上的上一个正式版本开始，忽略 Preview 标签。Preview 说明可以从上一个 Preview 的源代码开始。两者都不使用无关分支上的最新标签。整个运行过程中，计划使用的源代码始终是事件 SHA；准备工作不会跟随不断变化的分支。
 
-For daily preparation, maintainers can later set `NANOBOT_PREVIEW_BASE` to the next unreleased final version and explicitly enable `NANOBOT_DAILY_CANDIDATES_ENABLED=true`. The schedule is currently 00:17 UTC. Only the official repository's `main` can use it. It requires successful latest push CI for that exact SHA and skips a source/base already accepted by this workflow. Failed candidates can run again; manual dispatch remains available to retain a new handoff. Both paths share the existing workflow run number for `.devN`. Update the base after its final release; an already tagged base is refused.
+如需每日准备，维护者之后可以将 `NANOBOT_PREVIEW_BASE` 设置为下一个尚未发布的正式版本，并明确启用 `NANOBOT_DAILY_CANDIDATES_ENABLED=true`。目前的计划执行时间为 UTC 00:17。只有官方仓库的 `main` 可以使用此功能。它要求该精确 SHA 最新一次 push CI 成功，并跳过已经通过此工作流验收的 source/base 组合。失败的候选版本可以重新运行；仍可手动触发，以保留新的交接包。两条路径都使用现有的工作流运行编号生成 `.devN`。对应正式版本发布后，要更新 base；已经打过标签的 base 会被拒绝。
 
-Daily runs retain small reports only, not the optional installable handoff. They still use the existing five native runners and temporary wheel transfers, so review the runner and storage cost before enabling the variable. This is a preparation switch, not permission to sign or publish. No repository variable or protection setting is changed by adding this workflow code.
+每日运行只保留小型报告，不保留可选的可安装交接包。它仍使用现有的五个原生运行器和临时 wheel 传输，因此启用该变量前，应评估运行器和存储成本。这只是准备开关，不代表允许签名或发布。添加此工作流代码不会更改任何仓库变量或保护设置。
 
-### Stable patch procedure
+### Stable 补丁流程
 
-1. Select the supported stable baseline and reviewed fixes. If `main` contains unfinished features, branch from that baseline and backport only the required fixes. Do not relabel an unverified Preview as stable.
-2. Allocate an unused final version, update both version declarations, and follow **Prepare a candidate**. Patches require the same packaging, licensing, native startup, data-preservation and update/recovery gates as feature releases.
-3. Publish approved immutable files in order: GitHub, PyPI, public-download checks, then the catalogue's `stable` pointer. Preserve `preview` and withdrawal history. A stable patch older than an installed Preview must not be offered as a downgrade.
-4. Publish concise fix notes and required operator actions. Users without this updater need their original installation method for the first upgrade; external package/deployment owners retain their route.
+1. 选择受支持的 Stable 基线和已通过评审的修复。如果 `main` 含有尚未完成的功能，请从该基线创建分支，只回填所需修复。不得把未经验证的 Preview 改标为 Stable。
+2. 分配一个未使用的正式版本号，更新两处版本声明，并遵循**准备候选版本**的流程。补丁与功能版本一样，必须通过打包、许可、原生启动、数据保留以及更新/恢复这些发布门槛。
+3. 按顺序发布获批的不可变文件：GitHub、PyPI、公开下载检查，最后推进目录中的 `stable` 指针。保留 `preview` 和撤回记录。如果 Stable 补丁比用户已安装的 Preview 更旧，不得将其作为降级版本提供给用户。
+4. 发布简明的修复说明和必要的运维操作。没有此更新器的用户，首次升级仍需使用原来的安装方式；外部软件包或部署的负责人继续沿用各自的更新途径。
 
-### Preview procedure
+### Preview 流程
 
-1. Select an exact reviewed `main` commit with passing required CI; skip it if its source SHA matches the last accepted candidate. Record the next unreleased stable base and an unused increasing Preview sequence.
-2. Use **Verify Release Candidate** for that ref and base, manually or through enabled daily preparation. It prepares a version-only candidate, builds the WebUI and five native TUI bundles once, and runs macOS arm64/x64, Linux arm64/x64 and Windows x64 clean-install and packaged update/recovery acceptance against the exact manifest-bound wheels without publication. Ordinary PR CI keeps its Linux x64/Windows x64 matrix; candidate preparation uses all five native runners. Require the **Candidate required** check to pass; build-only reports are insufficient. Users receive built packages, not a checkout requiring Bun.
-3. Select `retain_installable` and preserve the accepted `installable-candidate` handoff before expiry. Temporary `candidate-native` inputs and `prepared-candidate` artifacts are not accepted handoffs. Complete real historical-baseline and interactive acceptance against those exact bytes; the automated fault-injection fixtures do not establish compatibility with a previously published version or interactive desktop behavior. Keep candidate SHA, manifest hash, coverage, known issues and source-offer approval together; CI reports alone are neither installable artifacts nor publication consent.
-4. With separate approval, publish immutable `v<version>` at the **candidate** commit and a GitHub prerelease, never the latest stable release. Upload the complete verified set, manifest and notes; make the pinned installer source publicly reachable.
-5. Verify all public sizes/hashes and clean public install/update acceptance before advancing `preview` with a new catalogue generation. Validate against the latest catalogue, preserve `stable` and withdrawals, and serialize stable, Preview and withdrawal writes. A stale publisher must reread and revalidate.
-6. After partial upload, leave the feed unchanged and resume only from the original verified files. Lost or changed bytes require a new version and repeated acceptance. Withdraw unsafe candidates with a reason and offer a newer fix; never rewind the feed or restore user data.
+1. 选择已通过评审且必需 CI 全部通过的 `main` 精确提交；如果其源代码 SHA 与上一个通过验收的候选版本相同，则跳过。记录下一个尚未发布的 Stable base 和未使用、递增的 Preview 序号。
+2. 针对该 ref 和 base 使用 **Verify Release Candidate**，可手动运行，也可通过已启用的每日准备运行。它准备只修改版本的候选版本，一次性构建 WebUI 和五个原生 TUI 包，并在不发布的情况下，对与清单精确绑定的 wheel 运行 macOS arm64/x64、Linux arm64/x64 和 Windows x64 的全新安装及打包更新/恢复验收。普通 PR CI 仍使用 Linux x64/Windows x64 矩阵；候选版本准备使用全部五个原生运行器。**Candidate required** 检查必须通过，仅有构建报告不够。用户获得的是构建好的软件包，而不是还需要 Bun 的源码检出。
+3. 选择 `retain_installable`，并在过期前保存已通过验收的 `installable-candidate` 交接包。临时的 `candidate-native` 输入和 `prepared-candidate` 工件不算通过验收的交接包。针对这些完全相同的字节完成真实历史基线和交互验收；自动化故障注入夹具不能证明与先前发布版本的兼容性，也不能证明交互式桌面行为。将候选 SHA、清单哈希、覆盖范围、已知问题和源码提供承诺的批准记录放在一起；仅有 CI 报告，既不等于可安装工件，也不等于同意发布。
+4. 经单独批准，在**候选**提交上发布不可变的 `v<version>` 和 GitHub 预发布，绝不能使用最新的 Stable 发布。上传完整且经过验证的文件集、清单和说明；确保固定版本的安装器源码可以公开访问。
+5. 以新的目录生成推进 `preview` 前，验证所有公开文件的大小和哈希，并完成公开的全新安装/更新验收。根据最新目录进行验证，保留 `stable` 和撤回记录，并串行处理 Stable、Preview 和撤回写入。发布方如果持有过期的目录状态，必须重新读取并验证。
+6. 只上传了一部分文件时，保持更新源不变，只能使用原先经过验证的文件继续。字节丢失或发生变化时，必须使用新版本号并重新验收。撤回不安全的候选版本时要说明原因，并提供包含修复的更新版本；绝不能回滚更新源或恢复用户数据。
 
-Use Python version ordering: `0.3.6.dev42 < 0.3.6.dev43 < 0.3.6 < 0.3.7.dev1` (illustrative versions). Once a final base ships, previews need a later base; allocate it after accounting for stable patches. The workflow uses `github.run_number` for `N` in `X.Y.Z.devN`; do not reset the sequence without checking published versions. Reruns cannot replace published bytes. Rebuild and test final releases under their final identity; never rename `.devN` wheels.
+使用 Python 版本排序：`0.3.6.dev42 < 0.3.6.dev43 < 0.3.6 < 0.3.7.dev1`（示例版本）。正式 base 发布后，Preview 必须使用更晚的 base；分配时应考虑 Stable 补丁。工作流使用 `github.run_number` 作为 `X.Y.Z.devN` 中的 `N`；未检查已发布版本前，不得重置序号。重新运行不能替换已经发布的字节。正式版本必须以其正式标识重新构建和测试；绝不能重命名 `.devN` wheel。
 
-### Launch gates and automation boundary
+### 上线门槛与自动化边界
 
-Before offering public Preview, obtain approval for index ownership/protection, publication credentials, source retention and exact packaged/public-download acceptance. Candidate preparation does not activate a public channel, schedule, protected publisher or PyPI upload. Preserve approved release bytes and source outside expiring CI storage for their required lifetime.
+提供公开 Preview 前，必须就索引所有权和保护、发布凭据、源码保留，以及精确打包文件和公开下载的验收获得批准。准备候选版本不会启用公开通道、计划任务、受保护的发布方或 PyPI 上传。获批的发布字节和源码必须按要求期限保存在会过期的 CI 存储之外。
 
-Stable releases remain manual. Daily Preview preparation requires the explicit opt-in above; automatic publication needs a separate reviewed implementation and activation. Keep builds read-only and publication permissions in the protected stage. Keep one serialized catalogue writer. Announce Preview availability only after verifying its public feed. Any discovery hint must be dismissible; do not show an update badge for an unavailable channel or enroll users merely because they check.
+Stable 发布仍需手动进行。每日 Preview 准备需要上述明确 opt-in；自动发布则需要单独实现、评审并启用。构建保持只读，发布权限留在受保护阶段。目录只能有一个串行写入方。确认公开更新源可用后，才能宣布 Preview 上线。任何发现提示都必须可以关闭；通道不可用时不得显示更新徽标，也不能仅因用户检查更新就为其订阅。
 
-## Prepare a candidate
+## 准备候选版本
 
-1. Choose the previous release and exact candidate commit. Use a clean worktree without local configuration, sessions, credentials or unrelated changes.
-2. Update `project.version` in `pyproject.toml` and the final source-only fallback in `nanobot/__init__.py`. Private WebUI/TUI versions are not the Python release version.
-3. Review the generated change notes and add required upgrade/rollback instructions. Feature releases can add highlights and acknowledgements; ordinary patches do not need a full announcement. Verify counts: commits are not merged PRs. Coordinate security disclosures separately.
-4. Run Python, WebUI and TUI CI checks against the final commit, not an earlier PR head. Review installation, configuration, session and API changes.
-5. Run `uv build --out-dir <artifact-directory>` in a clean output directory without `NANOBOT_SKIP_WEBUI_BUILD`. The build hook bundles WebUI in sdist and wheel; the wheel is built from the sdist.
-6. Run `twine check` on intermediates, inspect contents and record SHA-256 hashes. Test installation in an isolated environment outside the checkout and upgrade from previous stable with disposable configuration/sessions, never a maintainer's live workspace.
-7. For feature releases, prepare the version documentation in `Re-bin/nanobot-web` under its `MAINTAINING.md`. For patches, update only affected instructions and translations; do not require a new complete manual or promotional page when the existing documentation still applies. Preserve existing URLs and previous versions, and verify affected site routes. Pin source references where applicable and never advertise an unpublished package. Preview notes cover development changes without creating a documentation edition each day.
-8. Review pinned Bun/OpenTUI licenses, corresponding source and relinking instructions. Check upstream revision availability and runtime/lockfile/notice agreement. Obtain the maintainer's commitment to the [source offer](../tui/SOURCE_OFFER.md) for its full stated period, at least three years after release; tests cannot grant it.
-9. Build all five native targets with publication scripts, ad-hoc signing macOS before packaging.
-   - Verify archive checksums, manifests, architecture, licenses/notices and embedded source, including checkout-matching bytes for `tui/scripts/targets.ts` and `tui/scripts/target-bindings.ts`. Run supported native smoke tests, record coverage and exact-head CI evidence, and label cross-compiled-only targets.
-   - Build platform wheels below, check them with `twine check`, validate RECORDs/tags/permissions and test pip selection on all five platforms.
-   - Test first launch with an empty cache and `NANOBOT_TUI_NO_DOWNLOAD=1`; the executable must come from `site-packages/nanobot/tui/bin/`, not checkout or cache.
-10. Merge release preparation only after current checks/reviews pass. Compare the merged source tree with the tested candidate; rebuild/recheck changes. Reconcile changelog and documentation links, then tag the verified commit, not an unchecked later `main` tip.
+1. 选择上一个发布版本和精确的候选提交。使用干净的工作树，其中不得有本地配置、会话、凭据或无关改动。
+2. 更新 `pyproject.toml` 中的 `project.version` 和 `nanobot/__init__.py` 中最终仅源码模式的回退值。私有的 WebUI/TUI 版本不是 Python 发布版本。
+3. 检查生成的变更说明，补充必要的升级/回滚指引。功能版本可以加入亮点和致谢；普通补丁不需要完整公告。核对数量：提交数不等于已合并的 PR 数。安全披露另行协调。
+4. 针对最终提交运行 Python、WebUI 和 TUI CI 检查，不要使用较早的 PR head。评审安装、配置、会话和 API 变更。
+5. 在干净的输出目录中运行 `uv build --out-dir <artifact-directory>`，不要设置 `NANOBOT_SKIP_WEBUI_BUILD`。构建钩子会将 WebUI 打包进 sdist 和 wheel；wheel 由 sdist 构建。
+6. 对中间产物运行 `twine check`，检查内容并记录 SHA-256 哈希。在源码检出之外的隔离环境中测试安装，并使用一次性的配置和会话测试从上一 Stable 版本升级，绝不能使用维护者正在使用的工作区。
+7. 功能版本应按照 `Re-bin/nanobot-web` 中的 `MAINTAINING.md` 准备版本文档。补丁只更新受影响的说明和译文；现有文档仍然适用时，不要求重新编写完整手册或宣传页面。保留现有 URL 和历史版本，并验证受影响的网站路由。适用时固定源码引用，绝不能宣传尚未发布的软件包。Preview 说明涵盖开发变更，无需每天创建新版文档。
+8. 检查固定版本 Bun/OpenTUI 的许可证、对应源码和重新链接说明。确认上游修订可用，并检查运行时、锁文件和许可声明是否一致。取得维护者对[源码提供承诺](../tui/SOURCE_OFFER.md)完整期限的承诺，至少为发布后三年；测试不能代替这项承诺。
+9. 使用发布脚本构建全部五个原生目标，并在打包前对 macOS 进行 ad-hoc 签名。
+   - 验证归档校验和、清单、架构、许可证/声明和内嵌源码，包括 `tui/scripts/targets.ts` 与 `tui/scripts/target-bindings.ts` 的字节是否与源码检出一致。运行受支持的原生冒烟测试，记录覆盖范围和精确 head 的 CI 证据，并标明仅交叉编译的目标。
+   - 按下文构建平台 wheel，使用 `twine check` 检查，验证 RECORD、标签和权限，并在全部五个平台测试 pip 的选择结果。
+   - 使用空缓存和 `NANOBOT_TUI_NO_DOWNLOAD=1` 测试首次启动；可执行文件必须来自 `site-packages/nanobot/tui/bin/`，不能来自源码检出或缓存。
+10. 只有当前检查和评审全部通过后，才能合并发布准备改动。将合并后的源码树与已测试的候选版本比较；如有变化，重新构建和检查。核对更新日志和文档链接，然后为通过验证的提交打标签，不要选择后来未经检查的 `main` 顶端。
 
-### Protected updater handoff compatibility
+### 受保护更新器的交接兼容性
 
-Restart-capable packages include `nanobot/update_contract.json`: schema version 1, with `handoff_protocols` listing positive integer protocol IDs. Protocol 1's request, protected startup and activation requirements are defined in the [update protocol](./update-protocol.md), independently of package and WebUI versions.
+支持重启的软件包包含 `nanobot/update_contract.json`：schema 版本为 1，`handoff_protocols` 列出正整数协议 ID。协议 1 的请求、受保护启动和激活要求定义在[更新协议](./update-protocol.md)中，与软件包和 WebUI 版本无关。
 
-Before advertising protocol 1, run preparation, frozen-worker and actual-gateway restart tests against packaged code; verify the declaration is in both sdist and wheel. Retain an ID only while its entire contract is supported; incompatible request, startup or activation behavior needs a new ID. Older updaters may install a future package only if protocols overlap. Missing, malformed or non-overlapping declarations must be refused before shutdown and require the installation owner's external update route.
+宣传支持协议 1 前，针对打包后的代码运行准备、冻结 worker 和真实网关重启测试；确认 sdist 和 wheel 中都有该声明。只有完整支持某项约定的全部内容时才保留其 ID；请求、启动或激活行为不兼容时，需要使用新的 ID。旧更新器只有在协议有交集时才能安装未来的软件包。声明缺失、格式错误或不重叠时，必须在关闭前拒绝，并要求安装所有者使用外部更新途径。
 
-### Legacy history and proxy compatibility window
+### 旧版历史记录和代理的兼容窗口
 
-Retain legacy model JSONL, WebUI JSONL / segments and per-feature proxy migration throughout **0.4.x**. Removing them before the next minor release would prevent older installations from migrating through a 0.4.x patch release.
+在整个 **0.4.x** 期间保留旧版模型 JSONL、WebUI JSONL / segments 和按功能划分的代理迁移。在下一个次版本之前移除它们，会导致旧安装无法通过 0.4.x 补丁版本完成迁移。
 
-**TODO(0.5.0):** Remove the legacy importers, proxy conversion, startup hooks and migration-specific tests; update upgrade fixtures and current documentation for SQLite history and `network.proxy` / `useProxy` only. Preserve SQLite schema upgrades and current-format behavior. The OpenAI API selector has its own compatibility window below.
+**TODO(0.5.0):** 移除旧版导入器、代理转换、启动钩子和迁移专用测试；更新升级夹具和当前文档，使其只涉及 SQLite 历史记录以及 `network.proxy` / `useProxy`。保留 SQLite schema 升级和当前格式的行为。OpenAI API 选择器有单独的兼容窗口，见下文。
 
-### OpenAI API selector compatibility window
+### OpenAI API 选择器兼容窗口
 
 v0.4.0 and v0.4.1 included automatic conversion of `providers.openai.apiType` / `api_type`. The first release without conversion must note in its release notes that users can save old configuration with v0.4.1 and must update launcher environment variables separately.
 
-### TUI preflight without a release tag
+### 无发布标签的 TUI 预检
 
-Use Bun 1.3.13 and a clean checkout; no tag or GitHub Release is required. Use the same `<target>` for preparation, compilation and notice generation. Run targets sequentially because preparation updates shared `node_modules`:
+使用 Bun 1.3.13 和干净的源码检出；不需要标签或 GitHub Release。准备、编译和声明生成使用同一个 `<target>`。由于准备过程会更新共享的 `node_modules`，各目标必须依次运行：
 
 ```bash
 cd tui
@@ -98,19 +98,19 @@ bun scripts/release-notices.ts <target>
 python3 scripts/package-release.py <target>
 ```
 
-Repeat for `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64` and `win32-x64`. On macOS, run `codesign --force --sign - <binary>` and verify it; the publication workflow uses pinned `rcodesign` on Linux. Keep the ten `.zip`/`.zip.sha256` files with Python intermediates and provenance manifest in a candidate-specific directory, excluding configuration, backups and test environments from upload selections.
+对 `darwin-arm64`、`darwin-x64`、`linux-arm64`、`linux-x64` 和 `win32-x64` 分别重复上述步骤。在 macOS 上运行 `codesign --force --sign - <binary>` 并验证签名；发布工作流在 Linux 上使用固定版本的 `rcodesign`。将十个 `.zip`/`.zip.sha256` 文件与 Python 中间产物和来源清单一同放在候选版本专用目录中，上传选择中不得包含配置、备份和测试环境。
 
-Candidate builds bundle minified JavaScript and the standalone Bun runtime with the additional precompiled bytecode cache disabled. Linux targets include both GNU and musl native variants, and x64 retains Bun's baseline CPU variant. Builds enforce a 135 MiB executable budget on Windows/Linux x64; other targets retain the existing 150 MiB ceiling until measured. The `dist/<executable>.size.json` report identifies the compiled, pre-signing executable and expected native packages; final archive manifests identify signed release bytes.
+候选构建会打包压缩后的 JavaScript 和独立 Bun 运行时，并禁用额外的预编译字节码缓存。Linux 目标包含 GNU 和 musl 两种原生变体，x64 保留 Bun 的 baseline CPU 变体。Windows/Linux x64 构建执行 135 MiB 的可执行文件预算；其他目标在完成测量前保留现有的 150 MiB 上限。`dist/<executable>.size.json` 报告标识编译完成、尚未签名的可执行文件及预期的原生软件包；最终归档清单标识签名后的发布字节。
 
-Before release, measure TUI first-screen and Mermaid render latency on each supported target, including first and warm renders. Verify cancellation and worker restart. Retain latency distributions and record executable, ZIP and final platform-wheel sizes separately. Cross-compilation and startup probes do not replace native interactive acceptance.
+发布前，在每个受支持目标上测量 TUI 首屏和 Mermaid 渲染延迟，包括首次渲染和热渲染。验证取消和 worker 重启。保留延迟分布，分别记录可执行文件、ZIP 和最终平台 wheel 的大小。交叉编译和启动探测不能替代原生交互验收。
 
-Native acceptance runs `tui/scripts/native_smoke.py` against the exact input wheel. It reuses the PTY/ConPTY input, resize and terminal-restoration checks, records five first-frame samples and cold/warm Mermaid samples with system font discovery, then terminates a submitted render and verifies a fresh worker. Its small report includes wheel/executable identities and sizes; obtain ZIP sizes from that candidate's manifest. This is automated native terminal interaction with an unavailable fixture gateway, not connected-model E2E or controlled cold-OS-cache timing. The `DiagramJobs` integration tests separately cover UI-side cancellation and subsequent-job completion.
+原生验收针对精确的输入 wheel 运行 `tui/scripts/native_smoke.py`。它复用 PTY/ConPTY 输入、调整大小和终端恢复检查，记录五次首帧样本以及使用系统字体发现的冷/热 Mermaid 样本，然后终止一次已提交的渲染并验证新的 worker。其小型报告包含 wheel/可执行文件标识和大小；ZIP 大小从该候选版本的清单中获取。这是与不可用夹具网关进行的自动化原生终端交互，不是连接模型的 E2E，也不是受控的操作系统冷缓存计时。`DiagramJobs` 集成测试另行覆盖 UI 侧取消和后续任务完成。
 
-The native render fixture includes Chinese C4 labels and generated Latin punctuation. Linux acceptance installs the supported `fonts-noto-cjk` system dependency; macOS and Windows use their installed fonts. This setup does not bundle fonts in the wheel or prove Chinese rendering on a host without suitable fonts. Keep the glyph checks enabled and retain the source-view fallback for users whose fonts are unavailable.
+原生渲染夹具包含中文 C4 标签和生成的拉丁标点。Linux 验收会安装受支持的 `fonts-noto-cjk` 系统依赖；macOS 和 Windows 使用系统已安装的字体。这种设置不会把字体打包进 wheel，也不能证明没有合适字体的主机可以渲染中文。保持字形检查启用，并为没有可用字体的用户保留源码视图回退。
 
-### Build the PyPI platform wheels
+### 构建 PyPI 平台 wheel
 
-After `uv build` and native archive checks, from the exact release checkout:
+完成 `uv build` 和原生归档检查后，在精确的发布源码检出中运行：
 
 ```bash
 uv run python -m scripts.build_tui_wheels \
@@ -119,38 +119,38 @@ uv run python -m scripts.build_tui_wheels \
   --out-dir <final-wheels>
 ```
 
-The script checks Python version/RECORD and native checksums, architecture, notices and source against the checkout, then writes five bundled wheels with regenerated RECORDs. It refuses existing candidates; `--target <target>` selects one platform. Minimum tags are macOS 13, manylinux glibc 2.17 and Windows x64; x64 uses Bun's baseline SSE4.2 runtime, not AVX2. Recheck Bun/OpenTUI requirements when upgrading either. There are no musl or Windows ARM64 wheels; tags do not substitute for native execution.
+脚本会依据源码检出检查 Python 版本/RECORD，以及原生校验和、架构、声明和源码，然后写出五个捆绑 wheel，并重新生成 RECORD。它拒绝覆盖已有候选文件；`--target <target>` 用于选择单个平台。最低标签为 macOS 13、manylinux glibc 2.17 和 Windows x64；x64 使用 Bun 的 baseline SSE4.2 运行时，而非 AVX2。升级 Bun 或 OpenTUI 时，重新检查二者的要求。不提供 musl 或 Windows ARM64 wheel；标签不能替代原生执行验证。
 
-PyPI receives **five platform wheels and one sdist**, not the intermediate universal wheel or native ZIPs. Keep the same build's platform-neutral sdist for Python/classic and WebUI on other platforms. Record source commit, version, files, hashes, checks and remaining gates; source changes require rebuilding and rechecking.
+PyPI 接收**五个平台 wheel 和一个 sdist**，不接收中间的通用 wheel 或原生 ZIP。保留同一构建生成的平台无关 sdist，供其他平台上的 Python/classic 和 WebUI 使用。记录源码提交、版本、文件、哈希、检查和剩余门槛；源码一旦变化，就必须重新构建和检查。
 
-Final releases also require `release-manifest.json` for `stable`. Run `scripts.release_candidate assemble` as shown below from the clean final-version checkout, using that final commit as `--source-commit` without Preview preparation. GitHub receives the same wheels/sdist, ten archive/checksum files and manifest; PyPI receives only wheels/sdist. Verify final source and public bytes before catalogue advancement. A TUI-only GitHub Release cannot deliver the final release to Preview subscribers.
+正式版本还需要为 `stable` 提供 `release-manifest.json`。在干净的正式版本源码检出中，按下文运行 `scripts.release_candidate assemble`，将最终提交用作 `--source-commit`，不进行 Preview 准备。GitHub 接收相同的 wheel/sdist、十个归档/校验和文件及清单；PyPI 只接收 wheel/sdist。推进目录前，验证最终源码和公开字节。只含 TUI 的 GitHub Release 无法向 Preview 订阅者交付正式版本。
 
-For same-build candidate acceptance on all five native targets, run **Verify Release Candidate** at the exact final-version ref with `channel=stable`, `next_stable` equal to that declared version and `retain_installable=true`. Stable preparation copies the exact commit without changing version declarations or creating a Preview commit; it rejects mismatched versions and existing stable tags. The default `channel=preview` retains the version-only Preview preparation. Both modes are read-only preparation, require **Candidate required** and retain accepted files for one day; neither publishes a tag, release, PyPI package or feed. Download and independently preserve the accepted handoff before expiry, then complete remaining interactive and real historical-owner acceptance against that same manifest.
+要在全部五个原生目标上对同一构建进行候选验收，请在精确的正式版本 ref 上运行 **Verify Release Candidate**，设置 `channel=stable`、`next_stable` 等于声明的版本，并设置 `retain_installable=true`。Stable 准备会复制精确提交，不修改版本声明，也不创建 Preview 提交；版本不匹配或 Stable 标签已存在时会被拒绝。默认的 `channel=preview` 保留只修改版本的 Preview 准备方式。两种模式均为只读准备，都要求 **Candidate required**，并将通过验收的文件保留一天；两者都不会发布标签、Release、PyPI 软件包或更新源。在过期前下载并独立保存通过验收的交接包，然后针对同一清单完成剩余的交互和真实历史所有者验收。
 
-## Publish a stable package
+## 发布正式软件包
 
-One maintainer publishes the GitHub Release. GitHub Actions verifies and uploads the accepted distributions to PyPI via Trusted Publishing. Publishing installable packages does not enable application-managed updates.
+由一位维护者发布 GitHub Release。GitHub Actions 验证通过验收的分发包，并通过可信发布上传到 PyPI。发布可安装的软件包并不会启用应用管理的更新。
 
-1. Complete candidate acceptance on `main`. Preserve the original files and their manifest, and use the accepted commit for `vX.Y.Z`. Never move or reuse a published tag.
-2. Create a draft with the five platform wheels, sdist, five TUI archives, their checksums and the original `release-manifest.json`. Use the artifact set that passed acceptance, without rebuilding any files under that release identity. If using **Publish Terminal UI** to rebuild, assemble new matching wheels and manifests and repeat candidate acceptance before publishing.
-3. Click **Publish release**. A stable publication starts **Validate published release for PyPI**, which starts **Publish accepted release to PyPI** on `main`. The publisher requires a matching CI manifest from a successful **Verify Release Candidate** run and a successful **Candidate required** job for that same attempt. It checks the tag, all public artifacts and the package index, then uploads only the five wheels and sdist. Prereleases and tag pushes alone do not publish Python packages.
-4. Verify clean installation from public PyPI, bundled WebUI and download-free TUI startup. Add the dated [Release Archive](./release-archive.md) entry and record the publication result. Only after GitHub and PyPI assets are public and verified should the wiki PR be merged; check affected localized routes. An update catalogue change is separate and requires the signature described below.
+1. 在 `main` 上完成候选验收。保留原始文件及其清单，并使用通过验收的提交创建 `vX.Y.Z`。绝不能移动或复用已发布的标签。
+2. 创建草稿，附上五个平台 wheel、sdist、五个 TUI 归档、对应的校验和及原始 `release-manifest.json`。使用通过验收的整套工件，不得在同一发布标识下重新构建文件。如果使用 **Publish Terminal UI** 重新构建，必须组装新的匹配 wheel 和清单，并在发布前重新完成候选验收。
+3. 点击 **Publish release**。正式版本发布会启动 **Validate published release for PyPI**，随后在 `main` 上启动 **Publish accepted release to PyPI**。发布器要求成功的 **Verify Release Candidate** 运行提供匹配的 CI 清单，并且同一次尝试的 **Candidate required** 任务成功。它检查标签、所有公开工件和软件包索引，然后只上传五个 wheel 和 sdist。预发布或仅推送标签不会发布 Python 软件包。
+4. 验证从公开 PyPI 全新安装、捆绑 WebUI 和无需下载的 TUI 启动。添加注明日期的[发布归档](./release-archive.md)条目并记录发布结果。只有 GitHub 和 PyPI 资源均已公开并通过验证，才能合并 wiki PR；检查受影响的本地化路由。更新目录变更是独立操作，需要下文所述的签名。
 
-### Configure Trusted Publishing
+### 配置可信发布
 
-Protect `main` and the publication workflows. In the `nanobot-ai` PyPI project's **Publishing** settings, bind `HKUDS/nanobot`, `publish-pypi.yml` and the `pypi` environment. Keep that GitHub environment restricted to `main`; the single-click path does not require an environment reviewer. During rollout, verify the publishing path with a separately configured TestPyPI trusted publisher (the same repository and workflow, environment `testpypi`) before removing a production reviewer requirement. Production does not use a long-lived token. The separate `release-approval` environment retains independent review.
+保护 `main` 和发布工作流。在 PyPI 项目 `nanobot-ai` 的 **Publishing** 设置中，绑定 `HKUDS/nanobot`、`publish-pypi.yml` 和 `pypi` 环境。该 GitHub 环境只允许从 `main` 部署；一键发布路径不要求环境评审者。上线过程中，先使用单独配置的 TestPyPI 可信发布者验证发布路径（相同仓库和工作流，环境为 `testpypi`），再取消生产环境的评审者要求。生产环境不使用长期令牌。独立的 `release-approval` 环境继续保留独立评审。
 
-To rehearse or resume, use **Run workflow** on `main` with the already-published version and destination `testpypi` or `pypi`. If the human GitHub publication did not dispatch the upload, use the same manual workflow entry point. Use a new run, not **Re-run jobs**: a new run checks the index and uploads only missing files. If the original CI report has expired, automatic publication stops. Preserve the accepted bytes and their verification record; use the existing manual upload route for those same verified files when necessary. Never replace a published file or move its tag.
+演练或恢复发布时，在 `main` 上使用 **Run workflow**，填入已发布版本和目标 `testpypi` 或 `pypi`。如果人工发布 GitHub Release 未触发上传，使用同一个手动工作流入口。创建新的运行，不要使用 **Re-run jobs**：新运行会检查索引，只上传缺失的文件。如果原始 CI 报告已过期，自动发布会停止。保留通过验收的文件字节和验证记录；必要时使用现有手动上传途径上传同一批已验证文件。绝不能替换已发布的文件或移动其标签。
 
-### Release approval proof
+### 发布批准证明
 
-Both Stable and Preview automatic installs require `release-manifest.json.sigstore.json` beside the manifest on the exact GitHub release. Clients verify Sigstore's production certificate chain/transparency proof and accept only `HKUDS/nanobot`'s manual `release-approve.yml` on `main`. The signed manifest must match version, wheel size/digest and, for Preview, catalogue commit/manifest binding. Verification runs before download and before shutdown, with no unsigned fallback. Unsigned historical releases remain discoverable but cannot be automatically installed; existing installations keep running.
+Stable 和 Preview 的自动安装都要求精确的 GitHub Release 中，在清单旁提供 `release-manifest.json.sigstore.json`。客户端验证 Sigstore 的生产证书链和透明度证明，只接受 `HKUDS/nanobot` 在 `main` 上手动运行的 `release-approve.yml`。签名清单必须与版本、wheel 大小/摘要匹配；对于 Preview，还必须匹配目录提交/清单绑定。验证在下载前和关闭前执行，没有未签名回退。未签名的历史发布仍可被发现，但不能自动安装；现有安装继续运行。
 
-Before setting the repository variable `NANOBOT_RELEASE_SIGNING_ENABLED=true`, an administrator must protect `main` and the `release-approval` environment: require independent review, prevent self-review, allow deployment only from `main`, and restrict bypass and changes to the workflow/signing requirements. Signing is disabled without that variable. No long-lived signing key or Apple Developer ID is required.
+设置仓库变量 `NANOBOT_RELEASE_SIGNING_ENABLED=true` 前，管理员必须保护 `main` 和 `release-approval` 环境：要求独立评审、禁止自我评审、只允许从 `main` 部署，并限制绕过保护及更改工作流/签名要求的权限。未设置该变量时，签名保持禁用。不需要长期签名密钥或 Apple Developer ID。
 
-After candidate tests and dependency review, take version, manifest SHA-256, source SHA and candidate SHA from retained acceptance evidence, not public downloads. Upload the proposed manifest through the separately authorized release handoff, then manually run **Approve Exact Release** from `main` with those values and obtain environment review. The hash-locked job checks/signs the exact manifest without installing candidate code or writing releases, PyPI or the catalogue. Separately authorize attaching its proof, verify the public proof before advancing either channel, and preserve it with candidate evidence before its three-day CI expiry.
+候选测试和依赖评审完成后，从保留的验收证据中取得版本、清单 SHA-256、源码 SHA 和候选 SHA，不要从公开下载中取得。通过单独授权的发布交接上传拟定的清单，然后使用这些值从 `main` 手动运行 **Approve Exact Release**，并取得环境评审。哈希锁定任务检查并签署精确的清单，不安装候选代码，也不写入 Release、PyPI 或目录。附加其证明需要单独授权；推进任一通道前验证公开证明，并在三天 CI 保留期届满前，将其与候选证据一起保存。
 
-Regenerate the signing lock only in a reviewed dependency update:
+只有在经过评审的依赖更新中，才重新生成签名锁：
 
 ```bash
 uv pip compile .github/release-signing-requirements.in --python-version 3.11 \
@@ -158,37 +158,37 @@ uv pip compile .github/release-signing-requirements.in --python-version 3.11 \
   --output-file .github/release-signing-requirements.txt
 ```
 
-Review resolved dependencies; hashes are not malware review. Before the first release, prove a supported real old updater can install the signed candidate and that the candidate can install the next signed version. Private packaged recovery fixtures substitute publication authority and are not signature evidence.
+检查解析出的依赖；哈希不等于恶意代码审查。首次发布前，证明受支持的真实旧更新器可以安装签名候选版本，且该候选版本可以安装下一个签名版本。私有的打包恢复夹具代替的是发布权限，不是签名证据。
 
-The proof authenticates release approval, not reproducible builds or harmless code. Compromised authorized workflows/reviewers, malicious source that passes review and compromised runtime dependencies remain risks. The signing lock does not lock runtime resolution, which retains the installation owner's policy. A reviewed runtime dependency inventory, public signed upgrade continuity and verified repository protection settings remain security-release gates; do not claim comprehensive supply-chain protection without them. The first installer and checksum source also need a trusted distribution channel.
+该证明验证的是发布批准，不证明构建可复现或代码无害。已授权工作流或评审者遭到入侵、恶意源码通过评审、运行时依赖遭到入侵，这些风险依然存在。签名锁不锁定运行时依赖解析，后者仍遵循安装所有者的策略。经过评审的运行时依赖清单、公开的签名升级连续性，以及经过验证的仓库保护设置，仍是安全发布的门槛；缺少这些条件时，不得宣称提供全面的供应链保护。首个安装器和校验和来源也需要可信的分发渠道。
 
-Only after the signature, matching public release files and applicable public update checks are verified may the maintainer advance `stable` or `preview`. Preserve the other channel and withdrawals, and check discovery for both subscriptions. A package published without this proof remains available for manual installation, not application-managed updates.
+只有签名、匹配的公开发布文件和适用的公开更新检查均通过验证，维护者才能推进 `stable` 或 `preview`。保留另一通道和撤回记录，并检查两种订阅的更新发现。没有此证明的软件包仍可手动安装，但不能通过应用管理的更新安装。
 
-## If a gate fails
+## 如果某个门槛未通过
 
-Do not publish to PyPI with missing TUI artifacts or verification. Keep public documentation's `latest` on the usable stable version. Correct published packages with a new version, never replacement code behind an existing tag. Before downgrading a migrated installation, stop all old processes and follow the documented session rollback procedure.
+TUI 工件或验证缺失时，不得发布到 PyPI。公开文档的 `latest` 保持指向可用的 Stable 版本。修正已发布软件包时必须使用新版本，绝不能把替换代码藏在已有标签后。降级已迁移的安装前，停止所有旧进程，并遵循文档中的会话回滚流程。
 
-## Installer identity checks
+## 安装器身份检查
 
-Fresh base-package installs use the official installer's dedicated venv regardless of optional managers on PATH. `nanobot-install.json` is written before venv/download work so failed first installs retain their owner; it is not readiness proof. Existing venv/uv/pipx installations are not adopted or moved. The receipt records extras for update planning and opts `webui` into persistent background launch; unrecorded installs retain their lifecycle. Include this distinction and the instance-specific stop command in release notes.
+无论 PATH 上是否有可选管理器，全新安装基础软件包都使用官方安装器的专用 venv。`nanobot-install.json` 在 venv/下载工作前写入，因此首次安装失败也能保留其所有者；它不是就绪证明。现有 venv/uv/pipx 安装不会被接管或移动。回执记录 extras 以供更新规划，并让 `webui` 选择持久后台启动；未记录的安装保留其原有生命周期。发布说明中应包含这一区别和实例专用的停止命令。
 
-Linux/Windows native CI builds a platform wheel and runs the public installer in a private home without Bun/Node/Git on PATH, then checks the managed receipt, installed WebUI, native TUI and gateway. Python/WebUI changes also require these jobs. CI retains small reports, not candidate binaries. Startup probes and offline installer fixtures do not replace packaged upgrade/recovery or public-download acceptance.
+Linux/Windows 原生 CI 构建平台 wheel，并在 PATH 不含 Bun/Node/Git 的私有 home 中运行公开安装器，然后检查托管回执、已安装的 WebUI、原生 TUI 和网关。Python/WebUI 变更同样需要这些任务。CI 保留小型报告，不保留候选二进制文件。启动探测和离线安装器夹具不能替代打包升级/恢复或公开下载验收。
 
-Run `pytest tests/test_install_scripts.py` with `uv` and `pipx` available. It uses private homes, offline fixture wheels and real managers, without a gateway or real application install: `install.sh` on Unix and Windows PowerShell with `install.ps1` on Windows. CI provisions pipx outside application dependencies. Verify these owner-preservation requirements:
+在 `uv` 和 `pipx` 可用时运行 `pytest tests/test_install_scripts.py`。它使用私有 home、离线夹具 wheel 和真实管理器，不启动网关，也不真实安装应用：Unix 上使用 `install.sh`，Windows PowerShell 中使用 `install.ps1`。CI 在应用依赖之外准备 pipx。验证以下所有者保留要求：
 
-- Launch the selected persistent environment's isolated Python, not `pipx run`, disposable tools or an arbitrary PATH executable. Existing recognized installations take priority over newly available managers; multiple recognized installs require explicit choice. An ordinary active venv is explicit; uv/pipx environments must use their manager.
-- Preserve uv constraints. Generic pipx upgrades can drop constraints/options; the installer must refuse pipx records with those settings, lock workflows or unconfirmed sources. The owner must review and preserve them. Exact wheels may replace a wheel source, not registry constraints/options; pipx upgrades must retain requested extras and refuse wheels missing recorded extras.
-- A failed selected manager must not fall through to another installation, even on first install. Verify the exact persistent package version before onboarding: a successful pinned/locked skip is not target installation. Restarted gateway identity is a separate check.
+- 启动所选持久环境中的隔离 Python，不使用 `pipx run`、一次性工具或任意 PATH 可执行文件。已识别出的现有安装优先于新出现的管理器；识别出多个安装时，必须明确选择。普通的活动 venv 就是明确选择；uv/pipx 环境必须使用对应管理器。
+- 保留 uv 约束。通用 pipx 升级可能丢失约束/选项；对于带这些设置、锁定工作流或未确认来源的 pipx 记录，安装器必须拒绝处理。所有者必须检查并保留这些内容。精确 wheel 可以替换 wheel 来源，但不能替换注册表约束/选项；pipx 升级必须保留请求的 extras，并拒绝缺少已记录 extras 的 wheel。
+- 所选管理器失败后，不得转而使用另一个安装，即使首次安装也是如此。进入引导流程前，验证持久软件包的精确版本：固定版本/锁定模式下成功跳过，不等于安装了目标版本。重启后网关的身份需要单独检查。
 
-Verify the exact-handoff options against the pinned installer, not an older script: `install.sh --wheel <path> --sha256 <published-hash>` / `install.ps1 -Wheel <path> -Sha256 <published-hash>`, or `install.sh --release <version> --manifest-sha256 <trusted-manifest-hash>` / `install.ps1 -Release <version> -ManifestSha256 <trusted-manifest-hash>`. Wheel mode verifies checksum/package/version; release mode selects one of five native tags for the target Python and verifies size/hash/identity before invoking the original owner. No frontend toolchain or extra selector package is installed; the manager still checks Python/dependencies. Hashes must come from trusted metadata, not an unknown publisher.
+针对固定版本的安装器验证精确交接选项，不要使用旧脚本：`install.sh --wheel <path> --sha256 <published-hash>` / `install.ps1 -Wheel <path> -Sha256 <published-hash>`，或 `install.sh --release <version> --manifest-sha256 <trusted-manifest-hash>` / `install.ps1 -Release <version> -ManifestSha256 <trusted-manifest-hash>`。Wheel 模式验证校验和、软件包和版本；Release 模式为目标 Python 选择五个原生标签之一，并在调用原所有者前验证大小、哈希和身份。不会安装前端工具链或额外的选择器软件包；管理器仍会检查 Python/依赖。哈希必须来自可信元数据，不能来自未知发布方。
 
-Release downloads use official GitHub HTTPS hosts and configured HTTPS proxy; retain wheel sources at their recorded paths, including `~/.nanobot/downloads/releases` or `NANOBOT_RELEASE_CACHE`. Failed partial downloads are removed. Wheel-mode `--dry-run` / `-DryRun` verifies without installation/setup; release-mode dry-run checks only the manifest, creating no wheel/cache/environment/setup and proving neither wheel bytes nor dependency resolution.
+发布下载使用官方 GitHub HTTPS 主机和配置的 HTTPS 代理；wheel 来源保留在其记录路径，包括 `~/.nanobot/downloads/releases` 或 `NANOBOT_RELEASE_CACHE`。失败的不完整下载会被删除。Wheel 模式的 `--dry-run` / `-DryRun` 只验证，不安装或设置；Release 模式的 dry-run 只检查清单，不创建 wheel、缓存、环境或设置，也不能证明 wheel 字节或依赖解析正确。
 
-These exact-version handoffs do not discover Preview, change subscriptions, stop gateways or back up data. Require stopped writers and backup first. Review extras and recorded options for plain pip, suffixed/custom installs and external owners; see the [user guide](./updating.md) and [update protocol](./update-protocol.md). Installer fixtures alone do not establish live maintenance, backup or restart safety.
+这些精确版本交接不会发现 Preview、更改订阅、停止网关或备份数据。必须先停止写入方并备份。检查普通 pip、带后缀/自定义安装和外部所有者的 extras 及已记录选项；请参阅[用户指南](./updating.md)和[更新协议](./update-protocol.md)。仅凭安装器夹具，不能证明实际维护、备份或重启的安全性。
 
-### Packaged upgrade and recovery acceptance
+### 打包升级和恢复验收
 
-Linux/Windows native CI runs `scripts/verify_packaged_update.py` against its wheel; manual candidate preparation tests each of the five assembled platform wheels on a matching native runner. Run macOS acceptance against the candidate's macOS wheel:
+Linux/Windows 原生 CI 针对其 wheel 运行 `scripts/verify_packaged_update.py`；手动候选准备则在匹配的原生运行器上分别测试五个组装好的平台 wheel。针对候选版本的 macOS wheel 运行 macOS 验收：
 
 ```bash
 <build-tools-python> -I scripts/verify_packaged_update.py \
@@ -196,53 +196,53 @@ Linux/Windows native CI runs `scripts/verify_packaged_update.py` against its whe
   --output <new-private-acceptance-directory>
 ```
 
-Build tools need project Python dependencies. The probe creates disposable venv/account/configuration/workspace and loopback gateways, without maintainer data, models or credentials. It records the unchanged healthy target's SHA-256 and candidate commit; faulted private wheels must never be uploaded.
+构建工具需要项目的 Python 依赖。探测程序创建一次性的 venv、账户、配置、工作区和环回网关，不使用维护者的数据、模型或凭据。它记录未改动的健康目标的 SHA-256 和候选提交；注入过故障的私有 wheel 绝不能上传。
 
-On a local macOS desktop, add `--dock` to verify the real AppKit helper alongside these journeys. The managed receipt must make `nanobot webui --yes --no-open` detach automatically; each applicable running version must have one helper, preserve desktop intent through upgrade/recovery and a second start, and remove its helper on stop. Historical packages without Dock support gain the icon only after their first healthy upgrade and an explicit WebUI launch. This is process/lifecycle acceptance, not a visual Dock-click test; do not enable it on headless CI or claim native Windows/Linux icon coverage.
+在本地 macOS 桌面上，添加 `--dock`，在这些流程中同时验证真实的 AppKit 辅助程序。托管回执必须让 `nanobot webui --yes --no-open` 自动分离；每个适用的运行版本都必须有一个辅助程序，在升级/恢复和第二次启动后保留桌面意图，并在停止时移除辅助程序。不支持 Dock 的历史软件包只有在首次健康升级并明确启动 WebUI 后才会获得图标。这是进程/生命周期验收，不是 Dock 点击的视觉测试；不要在无头 CI 上启用，也不要宣称覆盖原生 Windows/Linux 图标。
 
-Require normal and consecutive upgrades, skipped Preview, import/startup failure, backup failure after shutdown, worker termination, partial metadata loss and interruption between program-restoration renames. Each successful journey must show the expected version in a new gateway run, a retained verified backup, authenticated history reads, continued writes and a second ordinary start. Each recovered service must then update to the healthy target with the same account/conversations. Faults affect the first job; backup failure must survive its automatic retry, while a separately confirmed next update can make a healthy backup. The instrumented intermediate Preview's second hop installs the unchanged final wheel.
+必须覆盖正常升级、连续升级、跨过 Preview、导入/启动失败、关闭后备份失败、worker 终止、部分元数据丢失，以及程序恢复重命名之间的中断。每条成功流程都必须在新网关运行中显示预期版本，保留经过验证的备份，支持经过身份验证的历史读取、继续写入和第二次正常启动。每个恢复后的服务随后都必须使用相同账户/会话更新到健康目标。故障影响第一个任务；备份失败后必须能通过自动重试，而单独确认的下一次更新可以生成健康备份。插桩的中间 Preview 第二跳安装未改动的最终 wheel。
 
-Compare configuration, retained legacy-source bytes, canonical SQLite records, WebUI transcripts and pending `delivery/outbox.sqlite3` records separately. Cover canonical-only, display-only and mixed history without inventing canonical records for display-only chats; SQLite checkpoint byte changes alone are not data loss. Retain the protocol-1 parked-gateway regression across old/new protected-store inventories: no outbox initialization, migration or writes outside the old grant before activation. See the [update protocol](./update-protocol.md) for scope and lease requirements.
+分别比较配置、保留的旧版源字节、权威 SQLite 记录、WebUI 对话记录和待处理的 `delivery/outbox.sqlite3` 记录。覆盖仅权威、仅显示和混合历史记录，不得为仅显示的会话虚构权威记录；SQLite 检查点字节变化本身不代表数据丢失。在旧/新受保护存储清单之间保留协议 1 的暂停网关回归测试：激活前，不得在旧授权范围之外初始化、迁移或写入 outbox。范围和租约要求请参阅[更新协议](./update-protocol.md)。
 
-Default baselines are labelled target-derived fixtures, not historical compatibility evidence. For release acceptance, add `--baseline-wheel <previously-accepted-wheel>` and repeat with supported stable and older Preview packages, including skipped Preview. Baseline feed transport is instrumented; the healthy target is unchanged. Include a retained pre-SQLite updater to check JSONL migration's canonical message bodies separately from display history. If recovery restores JSONL code, mark SQLite checks not applicable, not passed. Packages without this updater need separately recorded installation-owner bootstrap acceptance.
+默认基线标注为目标派生夹具，不是历史兼容性证据。发布验收时，添加 `--baseline-wheel <previously-accepted-wheel>`，并使用受支持的 Stable 和较早的 Preview 软件包重复测试，包括跨过 Preview 的情况。基线更新源传输经过插桩；健康目标保持不变。加入保留的 SQLite 之前版本更新器，分别检查 JSONL 迁移的权威消息正文和显示历史。如果恢复还原的是 JSONL 代码，将 SQLite 检查标为不适用，而不是通过。没有此更新器的软件包需要单独记录安装所有者的引导验收。
 
-Exercise consecutive updates in the same disposable account with existing conversations through each applicable owner: official installer, uv tool, pipx, ordinary pip venv and source. Check recorded constraints/options before/after, execute the offered command, verify the restarted gateway, append a message and start again. Policy refusal must leave installation unchanged; custom owner-reviewed updates do not prove automatic recovery. Container replacement requires a real engine and retained data volumes, not a mocked marker.
+在同一个已有会话的一次性账户中，通过每种适用的所有者执行连续更新：官方安装器、uv tool、pipx、普通 pip venv 和源码。检查前后记录的约束/选项，执行提供的命令，验证重启后的网关，追加一条消息并再次启动。策略拒绝必须保持安装不变；由所有者评审的自定义更新不能证明自动恢复能力。容器替换需要真实引擎和保留的数据卷，不能使用模拟标记。
 
-For installer-owned background recovery, verify one exact-target repair, then original-program restoration only before activation and only with unchanged protected data, including restart/health verification without browser or terminal intervention. Data changes, activation, live owners or changed installation ownership must prevent unsafe rollback. Other owners retain their repair route. Never delete jobs/fences or automatically restore old configuration/chat data. Exercise native Windows locks/renames. Loss of both supervisor and worker, permanent storage damage and incompatible data writes are not automatically recoverable; retain these limits in release notes and the operator guide.
+对于安装器所有的后台恢复，验证一次精确目标修复，然后只在激活前且受保护数据未变时恢复原程序，包括在无需浏览器或终端干预的情况下验证重启/健康状态。数据变化、激活、存活的所有者或安装所有权变化，都必须阻止不安全的回滚。其他所有者保留各自的修复途径。绝不能删除 jobs/fences 或自动恢复旧配置/聊天数据。执行原生 Windows 锁定/重命名测试。supervisor 和 worker 同时丢失、存储永久损坏以及不兼容的数据写入无法自动恢复；在发布说明和运维指南中保留这些限制。
 
-Keep private evidence until review; it can contain program generations/backups and is not an upload set. CI retains small reports, including completed cases after a later failure; only all selected journeys passing produces aggregate success. Partial reports or a timeout are not an overall pass. Record actual native OS/CPU coverage separately from installer/startup fixtures: Linux x64, Windows x64 and macOS arm64 do not establish macOS x64 or Linux arm64 coverage. Controlled release transport and fault injection prove neither public downloads nor interactive UI; complete those gates before claiming them.
+私有证据在评审前保持私有；其中可能包含程序世代/备份，不属于上传集。CI 保留小型报告，包括后续失败前已完成的用例；只有所有选定流程都通过，整体结果才算成功。部分报告或超时不算整体通过。将实际原生 OS/CPU 覆盖范围与安装器/启动夹具分开记录：Linux x64、Windows x64 和 macOS arm64 不能证明覆盖 macOS x64 或 Linux arm64。受控发布传输和故障注入不能证明公开下载或交互 UI；宣称具备这些能力前，必须完成相应门槛。
 
-## Stable and Preview subscriptions
+## Stable 和 Preview 订阅
 
-Use [Updating nanobot](./updating.md) for Settings → About and CLI instructions. Release acceptance must preserve opt-in consent: Preview is off even on development builds; switching saves/checks a feed, not installation approval. Require separate exact-version confirmation and a Preview risk warning. Profiles sharing an environment/account share its subscription; other installations/accounts do not. Environment replacement may require reselection; browser storage is not authoritative.
+“设置 → 关于”和 CLI 的说明请参阅[更新 nanobot](./updating.md)。发布验收必须保留主动订阅同意：即使是开发构建，Preview 也默认关闭；切换只保存/检查更新源，不代表批准安装。必须单独确认精确版本，并显示 Preview 风险警告。共享环境/账户的配置方案共享其订阅；其他安装/账户不共享。替换环境后可能需要重新选择；浏览器存储不是权威依据。
 
-| Current install / requested channel | Required acceptance result |
+| 当前安装 / 请求通道 | 必需的验收结果 |
 | --- | --- |
-| Stable → Preview, a newer verified preview exists | Offer that exact preview; install only after confirmation. |
-| Preview → Preview | Offer only a higher verified version, including a final release. |
-| Preview → Stable, stable is newer | Offer the final release; keep Stable selected. |
-| Preview → Stable, stable is older | Save Stable and wait for a newer final release; keep running the preview. |
-| Preview subscriber installs a final release | Keep Preview selected for the next development cycle. |
-| Current preview was withdrawn | Warn even without a safe newer replacement; never silently downgrade. |
-| Feed offline, incomplete, missing or incompatible | Return non-success; retain subscription and allow rechecking. |
+| Stable → Preview，存在更新的已验证 Preview | 提供该精确 Preview；仅在确认后安装。 |
+| Preview → Preview | 只提供更高的已验证版本，包括正式版本。 |
+| Preview → Stable，Stable 更新 | 提供正式版本；保持选择 Stable。 |
+| Preview → Stable，Stable 更旧 | 保存 Stable 选择并等待更新的正式版本；继续运行 Preview。 |
+| Preview 订阅者安装正式版本 | 为下一个开发周期保持选择 Preview。 |
+| 当前 Preview 已撤回 | 即使没有安全的新替代版本也要警告；绝不能静默降级。 |
+| 更新源离线、不完整、缺失或不兼容 | 返回非成功；保留订阅并允许重新检查。 |
 
-Stable checking/planning requires complete PyPI wheels/sdist. Preview uses `release-index/catalogue.json` and exact GitHub manifests, never PyPI `--pre` or arbitrary branches. Validate targets against the gateway interpreter/platform, not the browser. Index final releases for Preview subscribers too; advance only after verifying all referenced public assets.
+Stable 检查/规划需要完整的 PyPI wheel/sdist。Preview 使用 `release-index/catalogue.json` 和精确的 GitHub 清单，绝不使用 PyPI `--pre` 或任意分支。依据网关解释器/平台验证目标，而不是浏览器。也要为 Preview 订阅者索引正式版本；验证所有引用的公开资产后才能推进。
 
-Versions, tags and manifest hashes are immutable. Increment generation; never rewind or clear published pointers, remove withdrawals or reuse bad versions. To stop offering a version, retain its pointer and withdraw it. Serialize writers and validate `ReleaseCatalogue.validate_successor(previous)` against the latest catalogue. Clients reject rewrites relative to their last accepted catalogue; that check is not cryptographic signing.
+版本、标签和清单哈希均不可变。递增 generation；绝不能回滚或清除已发布指针、删除撤回记录或复用有问题的版本。要停止提供某个版本，保留其指针并将其撤回。串行处理写入方，并依据最新目录验证 `ReleaseCatalogue.validate_successor(previous)`。客户端拒绝相对其最后接受目录的重写；该检查不是加密签名。
 
-Acceptance must invalidate reviews on every channel change, including Stable → Preview → Stable; cancel inactive staged work through normal stop checks and retain diagnostics. Active preparation, committed shutdown, admitted installation or failed mutation blocks switching until settled/recovered. Reject stale-tab writes and reread after lost responses, never automatically retry installation. Detailed transaction rules belong in the [update protocol](./update-protocol.md).
+每次通道变化都必须使评审失效，包括 Stable → Preview → Stable；通过正常停止检查取消非活动的暂存工作，并保留诊断信息。活动准备、已提交关闭、已接纳安装或失败的变更会阻止切换，直到完成或恢复。拒绝过期标签页写入，响应丢失后重新读取，绝不能自动重试安装。详细事务规则见[更新协议](./update-protocol.md)。
 
-Discovery grants no installation authority. Only the official managed venv and supported POSIX uv transactions support the reviewed stop/install/restart flow; pipx, source, container, system-managed, unsupported uv/platform and desktop distributions retain their owner/distributor route. Remote browsers without package-install permission may read status but not change subscription. Older clients must get actionable failures for unrepresentable statuses, never false “up to date.” Verify these boundaries before announcing a public channel.
+发现不代表获得安装权限。只有官方托管 venv 和受支持的 POSIX uv 事务支持经过评审的停止/安装/重启流程；pipx、源码、容器、系统管理、不受支持的 uv/平台和桌面包仍由其所有者/分发方处理。没有软件包安装权限的远程浏览器可以读取状态，但不能更改订阅。对于无法表示的状态，旧客户端必须收到可操作的失败信息，绝不能错误地显示“已是最新”。宣布公开通道前，验证这些边界。
 
-## Non-publishing preview preflight
+## 不发布的 Preview 预检
 
-**Verify Release Candidate** is read-only preparation, either manually requested or explicitly enabled for daily Preview: no tags/releases, PyPI or catalogue writes. It builds/checks five platform wheels, sdist and licensed fallback archives. Cross-compilation is neither native execution nor release approval.
+**Verify Release Candidate** 是只读准备，可手动请求，也可明确启用每日 Preview：不写入标签/Release、PyPI 或目录。它构建并检查五个平台 wheel、sdist 和符合许可的回退归档。交叉编译既不是原生执行，也不是发布批准。
 
-Default retention is small identity/manifest/probe reports and installation guide for **three days**, without installable binaries. `retain_installable` preserves those exact checked artifacts plus a self-contained shallow Git repository for **one day** (about 400 MB). Keep this storage exception off for routine preflight or schedules; assess storage and call it out explicitly in workflow-change PRs before merge. Preserve approved handoffs before expiry; rebuilding expired files cannot reuse their verification. The source contains only candidate/source-parent history, not configuration or untracked files. `handoff.json` is written only after copied artifacts verify; interruption is not an accepted handoff.
+默认将小型身份/清单/探测报告和安装指南保留**三天**，不包含可安装二进制文件。`retain_installable` 将这些经过检查的精确工件和一个自包含的浅层 Git 仓库保留**一天**（约 400 MB）。常规预检或计划任务应保持此存储例外关闭；合并前评估存储，并在工作流变更 PR 中明确说明。在过期前保存获批的交接包；重新构建已过期文件不能复用其验证结果。源码只包含候选/源码父提交历史，不包含配置或未跟踪文件。只有复制的工件通过验证后才写入 `handoff.json`；中断不算通过验收的交接。
 
-After assembly, the workflow transfers all five manifest-bound wheels by immutable artifact ID; each matching native runner installs its wheel and binary dependencies into a separate venv without Bun/Node/Git on the install PATH. Isolated Python checks version/commit/import identity, all Vite-manifest assets including lazy chunks through the installed handler, and bundled TUI `--desktop-protocol` with downloads disabled and empty private HOME. With `--gateway`, it starts a private foreground CLI gateway with no provider/MCP configuration, disabled heartbeat and two loopback ports, then checks readiness, protected version identity, HTML and process/listener cleanup. Unix shutdown must be graceful; Windows termination is labelled, not graceful-shutdown evidence. No model task or external channel is exercised.
+组装后，工作流通过不可变工件 ID 传输全部五个与清单绑定的 wheel；每个匹配的原生运行器将其 wheel 和二进制依赖安装到独立 venv 中，安装 PATH 不含 Bun/Node/Git。隔离 Python 检查版本/提交/导入身份，通过已安装处理器检查包括懒加载块在内的所有 Vite 清单资产，并在禁用下载和空私有 HOME 的条件下检查捆绑 TUI 的 `--desktop-protocol`。使用 `--gateway` 时，它启动私有前台 CLI 网关，不配置 provider/MCP，禁用心跳并使用两个环回端口，然后检查就绪状态、受保护版本身份、HTML 和进程/监听器清理。Unix 关闭必须优雅完成；Windows 终止会明确标注，不能作为优雅关闭证据。不执行模型任务或外部通道。
 
-On another supported platform, check a disposable native installation without changing its package:
+在另一个受支持平台上，检查一次性的原生安装，不要更改其软件包：
 
 ```bash
 <installed-venv-python> -I scripts/verify_installed_release.py \
@@ -250,9 +250,9 @@ On another supported platform, check a disposable native installation without ch
   --gateway --report <new-report-path>
 ```
 
-Use the candidate commit, not its parent. The probe rejects checkout imports/unisolated invocation and avoids user configuration/credentials. Omit `--gateway` for assets/TUI only. Reports identify OS/CPU/probes and are success-only, never overwritten; failure cleans up children and prints a bounded redacted log tail. This is package/startup evidence, not interactive UI, managed restart, migration, public-download or five-platform E2E acceptance.
+使用候选提交，而不是其父提交。探测程序拒绝从源码检出导入和非隔离调用，并避开用户配置/凭据。只检查资产/TUI 时省略 `--gateway`。报告标识 OS/CPU/探测项，只记录成功结果且绝不覆盖；失败时清理子进程，并打印长度受限、已脱敏的日志末尾。这是软件包/启动证据，不是交互 UI、托管重启、迁移、公开下载或五平台 E2E 验收。
 
-For local preparation, use a full source SHA and new output outside the checkout (illustrative base/sequence):
+本地准备时，使用完整源码 SHA 和源码检出之外的新输出目录（base/序号仅为示例）：
 
 ```bash
 python -m scripts.release_candidate prepare \
@@ -260,7 +260,7 @@ python -m scripts.release_candidate prepare \
   --output <new-candidate-directory>
 ```
 
-Preparation leaves the checkout untouched and deterministically creates a version-only commit for identical inputs. Build Python distributions and all native targets from it, then run from the candidate:
+准备过程不改动源码检出，并为相同输入确定性地创建只修改版本的提交。从该提交构建 Python 分发包和全部原生目标，然后在候选版本中运行：
 
 ```bash
 python -m scripts.release_candidate assemble --source-commit <original-source-sha> \
@@ -269,28 +269,28 @@ python -m scripts.release_candidate assemble --source-commit <original-source-sh
   --tui-dir tui/dist --output <new-artifact-directory>
 ```
 
-Assembly refuses existing output and emits the manifest only after complete-set, version/commit, WebUI, RECORD, native/source and permissions checks. It compares sdist sources/resources against tracked candidate files with packaging exclusions, and all wheels' application/WebUI bytes against the sdist. Commit markers and RECORDs alone are insufficient; these comparisons do not prove reproducible frontend/native compilation. Recheck with `python -m scripts.release_candidate verify --source-commit <original-source-sha> --artifacts <artifact-directory>`; it may reuse an identical manifest, never replace different bytes.
+组装拒绝已有输出，只有在完整集合、版本/提交、WebUI、RECORD、原生/源码和权限检查全部通过后才生成清单。它在应用打包排除项后，将 sdist 源码/资源与候选版本的受跟踪文件比较，并将所有 wheel 的应用/WebUI 字节与 sdist 比较。仅有提交标记和 RECORD 不够；这些比较也不能证明前端/原生编译可复现。使用 `python -m scripts.release_candidate verify --source-commit <original-source-sha> --artifacts <artifact-directory>` 重新检查；它可以复用完全相同的清单，但绝不能替换不同字节。
 
-Generate the handoff from the same candidate:
+从同一候选版本生成交接包：
 
 ```bash
 python -m scripts.release_candidate instructions --source-commit <original-source-sha> \
   --artifacts <artifact-directory> --output <new-install-guide-path.md>
 ```
 
-The generator rechecks artifacts/manifest and writes a non-overwriting guide outside the immutable upload directory. When both installers match the supported implementation, commands fetch the exact candidate's installer with the retained manifest hash for automatic platform selection; older candidates keep manual commands, never mutable `main` or assumed flags. Publication must make pinned installer source reachable.
+生成器重新检查工件/清单，并在不可变上传目录之外写入不覆盖已有文件的指南。当两个安装器都与受支持实现一致时，命令会使用保留的清单哈希获取精确候选版本的安装器，自动选择平台；较早候选版本保留手动命令，绝不使用可变的 `main` 或假定的参数。发布时必须让固定版本的安装器源码可访问。
 
-The guide records version, source/candidate commits, five hash-bound wheel URLs and separate new/existing base-package commands for uv, pipx and pip venv. Commands verify local size/SHA-256 with the standard library before manager invocation; URL hash fragments alone are insufficient for the tested uv commands. Retain wheel paths recorded by managers. Manual commands move to an advanced section when automatic entry is supported; no new manifest schema or installer executable is introduced.
+指南记录版本、源码/候选提交、五个与哈希绑定的 wheel URL，以及 uv、pipx 和 pip venv 各自用于全新/已有基础软件包的命令。命令在调用管理器前使用标准库验证本地大小/SHA-256；对于测试过的 uv 命令，仅有 URL 哈希片段不够。保留管理器记录的 wheel 路径。支持自动入口后，手动命令移至高级部分；不引入新的清单 schema 或安装器可执行文件。
 
-Before offering the guide, publish/verify exact public files and add release changes, native coverage, migration/recovery instructions and stop/backup prerequisites. Review extras and locked/suffixed/external-owner options; independently verify installed version and restarted gateway. Manager fixtures do not prove restart/migration, and the guide is neither publication approval nor channel selection.
+提供指南前，发布/验证精确的公开文件，并补充发布变更、原生覆盖范围、迁移/恢复说明以及停止/备份前提。检查 extras 和锁定/带后缀/外部所有者选项；独立验证已安装版本和重启后的网关。管理器夹具不能证明重启/迁移，指南既不是发布批准，也不是通道选择。
 
-The candidate clone borrows source Git objects; preserve its source repository until retained in an approved permanent ref. Partial assembly has no accepted manifest and must not be uploaded. Source-offer commitment, native launch, clean install, upgrade/recovery and publication gates still apply. Missing public assets must be recovered from original verified files, never overwritten by rebuilds.
+候选克隆借用源 Git 对象；在保留到获批的永久 ref 前，保存其源仓库。部分组装没有通过验收的清单，不得上传。源码提供承诺、原生启动、全新安装、升级/恢复和发布门槛仍然适用。缺失的公开资产必须从原始已验证文件恢复，绝不能用重新构建的文件覆盖。
 
-Retain an exact local handoff outside temporary build storage:
+在临时构建存储之外保留精确的本地交接包：
 
 ```bash
 python -m scripts.release_candidate retain --source-commit <original-source-sha> \
   --artifacts <verified-artifact-directory> --output <new-retained-directory>
 ```
 
-Only `artifacts/` is the upload set; `source.git/`, `install.md` and `handoff.json` are maintenance evidence, not PyPI packages. Restore with `git clone --no-local <retained>/source.git <new-checkout>`, check HEAD against `handoff.json`, and rerun `release_candidate verify` on retained artifacts before separately approved publication. Keep native reports and release notes alongside them; retention adds no native, migration, interactive UI or public-download evidence.
+只有 `artifacts/` 是上传集；`source.git/`、`install.md` 和 `handoff.json` 是维护证据，不是 PyPI 软件包。使用 `git clone --no-local <retained>/source.git <new-checkout>` 恢复，依据 `handoff.json` 检查 HEAD，并在单独批准的发布前对保留工件重新运行 `release_candidate verify`。将原生报告和发布说明与它们一起保存；保留本身不会增加原生、迁移、交互 UI 或公开下载证据。

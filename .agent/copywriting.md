@@ -1,37 +1,37 @@
-# Writing interface copy
+# 编写界面文案
 
-Read this when writing or revising user-facing labels, descriptions, buttons, hints, errors, or localized strings. Follow the task's explicit scope and language requirements.
+编写或修改面向用户的标签、说明、按钮、提示、错误或本地化字符串时，请阅读本文。遵循任务明确规定的范围和语言要求。
 
-## Keep copy work within scope
+## 文案工作不要超出范围
 
-A request to rewrite existing copy authorizes replacing existing string values. It does not authorize new locale keys, new explanations, exposing previously hidden help, or changing components, styles, layout, accessibility behavior, or runtime behavior. Keep those changes out of a copy-only PR unless separately requested.
+重写现有文案的请求只授权替换现有字符串值，不授权新增语言环境键、补充说明、显示此前隐藏的帮助，或更改组件、样式、布局、无障碍行为和运行时行为。除非另有明确要求，仅修改文案的 PR 不应包含这些更改。
 
-Read the owning code and nearby copy before renaming a feature. Preserve what the feature does, when it applies, and the consequences of the action. Ask about unresolved meaning before changing the affected copy; continue with independently understood strings.
+重命名功能前，先阅读负责该功能的代码和附近文案。保留功能的用途、适用条件和操作后果。如果相关文案的含义尚不明确，先询问再修改；含义已经明确的字符串可以继续处理。
 
-## Make the next action clear
+## 让下一步操作一目了然
 
-Use [Steve Krug's *Don't Make Me Think* principles](https://ptgmedia.pearsoncmg.com/imprint_downloads/peachpit/peachpit/promo/Dont_Make_Me_Tipsheet.pdf): people scan interfaces, so a label should make its purpose evident without a tutorial. Prefer familiar words, concrete nouns for features, and verbs that name the action for buttons.
+采用 [Steve Krug 的《Don't Make Me Think》原则](https://ptgmedia.pearsoncmg.com/imprint_downloads/peachpit/peachpit/promo/Dont_Make_Me_Tipsheet.pdf)：人们会快速浏览界面，因此标签应当无需教程就能让人明白用途。优先使用熟悉的词语，功能名称使用具体名词，按钮使用能说明操作的动词。
 
-Apply [Robin Williams's *The Non-Designer's Design Book* principles](https://www.peachpit.com/content/images/9780133966152/samplepages/9780133966152.pdf) to wording: repeat the same name for the same concept, use parallel phrasing for equivalent controls, keep related explanations together, and distinguish names, summaries, and detailed rules. These principles guide copy decisions; they do not expand permission to redesign the UI.
+将 [Robin Williams 的《The Non-Designer's Design Book》原则](https://www.peachpit.com/content/images/9780133966152/samplepages/9780133966152.pdf)应用到措辞中：同一概念始终使用同一名称，等价控件采用平行句式，相关说明放在一起，并区分名称、摘要和详细规则。这些原则用于指导文案决策，并不授权重新设计 UI。
 
-- Keep the established product voice calm and direct. Remove filler, internal implementation language, and clever expressions that obscure the action.
-- Preserve familiar technical terms and product names such as API, MCP, SSH, OAuth, and model names. Do not invent translations just to shorten them.
-- For Chinese, target 2–4 character feature names and introductory descriptions of at most 20 characters. Preserve technical names and necessary units even when they exceed the name target. Use natural, concise phrasing in other languages rather than applying Chinese character limits.
-- Shortening must preserve conditions, limits, defaults, units, permission boundaries, and destructive consequences. A short label must not imply broader capabilities or weaker restrictions.
-- Keep existing detailed rules in their existing description or help strings. When the task permits separating them, use those existing locations or a separate column in the review table; do not add UI or duplicate the original description merely to achieve a short summary.
-- Match visible labels, tooltips, confirmations, and accessible names where they describe the same action. Errors should state a supported recovery step; do not invent actions the product cannot perform.
+- 保持产品一贯冷静、直接的语气。删除填充词、内部实现术语，以及让操作含义变得晦涩的俏皮表达。
+- 保留 API、MCP、SSH、OAuth 和模型名称等熟悉的技术术语与产品名称。不要为了缩短文本而自造译名。
+- 中文功能名称以 2–4 个字为目标，引导说明不超过 20 个字。即使超出名称长度目标，也要保留技术名称和必要单位。其他语言采用自然、简洁的表达，不要套用中文字数限制。
+- 缩短文案时，必须保留条件、限制、默认值、单位、权限边界和破坏性后果。短标签不能暗示更强的能力或更弱的限制。
+- 将现有详细规则保留在原有说明或帮助字符串中。任务允许拆分时，使用这些已有位置或审查表格中的单独一列；不要为了得到简短摘要而增加 UI 或重复原有说明。
+- 可见标签、工具提示、确认提示和无障碍名称描述同一操作时，应保持措辞一致。错误信息应说明受支持的恢复步骤，不要编造产品无法执行的操作。
 
-## Complete localization together
+## 同步完成本地化
 
-Unless the task explicitly limits languages, review every supported locale for each changed copy key in the same change. Keep already-clear translations when appropriate; do not use English fallback as a substitute for completing the localized copy.
+除非任务明确限定语言，否则每次修改文案键时，都要在同一项更改中检查所有受支持的语言环境。已有译文清楚恰当就保留；不要用英文回退代替完成本地化文案。
 
-For WebUI, use [`supportedLocales`](../webui/src/i18n/config.ts) as the locale inventory. Check both `webui/src/i18n/locales/<locale>/common.json` and channel-owned `nanobot/channels/<channel>/webui/locales/<locale>.json`; common bundles do not contain all interface text. Inspect the owning client for other copy surfaces.
+对于 WebUI，以 [`supportedLocales`](../webui/src/i18n/config.ts) 作为语言环境清单。同时检查 `webui/src/i18n/locales/<locale>/common.json` 和各渠道自己的 `nanobot/channels/<channel>/webui/locales/<locale>.json`；公共资源包并不包含全部界面文本。检查负责相关功能的客户端中是否还有其他文案位置。
 
-Preserve locale keys, interpolation variables and their occurrences, formatting tokens, configuration values, command identifiers, and preset prompts. Prompts that are sent to the model affect behavior and are not ordinary interface copy. Keep intentionally localized display names and existing optional-key conventions.
+保留语言环境键、插值变量及其出现次数、格式标记、配置值、命令标识符和预设提示词。发送给模型的提示词会影响行为，不属于普通界面文案。保留有意本地化的显示名称和现有可选键约定。
 
-## Verify the final change
+## 验证最终更改
 
-- Review an original-copy → new-copy table. List existing detailed rules separately when useful, and identify any unresolved meaning instead of guessing.
-- Compare against the PR base: a copy-only change should contain existing string replacements and necessary updates to existing test selectors or copy assertions. Confirm that no locale keys or UI behavior were added or removed.
-- Check the supported locale inventory, key structure, interpolation occurrences, and preserved prompts. Review semantics as well as structural parity.
-- Update tests that look for changed labels without weakening their behavior assertions or changing unrelated fixture text. Run the relevant existing localization and interface tests, lint, and build checks for the affected surface. Follow [test selection guidance](simplify.md) and [verification evidence guidance](workflow.md); do not add tests solely to prove that words changed.
+- 审查原文案 → 新文案对照表。需要时将现有详细规则单独列出，含义不明确的地方要指出，不要猜测。
+- 与 PR 基准比较：仅修改文案的更改应只包含现有字符串替换，以及现有测试选择器或文案断言的必要更新。确认没有新增或删除语言环境键，也没有改变 UI 行为。
+- 检查受支持语言环境清单、键结构、插值出现次数和保留的提示词。除了结构一致性，还要审查语义。
+- 更新查找已修改标签的测试，但不要削弱其行为断言，也不要更改无关的测试夹具文本。运行受影响界面的现有本地化测试、界面测试、lint 和构建检查。遵循[测试选择指南](simplify.md)和[验证证据指南](workflow.md)；不要仅为证明文字发生变化而添加测试。

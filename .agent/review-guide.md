@@ -1,35 +1,35 @@
-# Review guide: WebUI clients and hosts
+# 审查指南：WebUI 客户端与主机
 
-Apply this checklist to changes to WebUI HTTP, WebSocket events/mutations, bootstrap, capabilities, host switching, and persisted browser state. Read this alongside the design and security constraints, not instead of them.
+此清单适用于涉及 WebUI HTTP、WebSocket 事件/变更、引导、能力、主机切换和浏览器持久化状态的更改。请结合设计与安全约束阅读本文，不要用本文取代这些约束。
 
-## Compatibility and deployment
+## 兼容性与部署
 
-- WebUI/gateway support and test coverage are limited to same-version combinations, including remote hosts. Cross-version combinations may work but have no compatibility guarantee, even when protocol checks pass. Align versions first when troubleshooting; do not reject connections solely because package versions differ.
-- The local installation owns executable WebUI assets. A remote host supplies authenticated data, events, and media, never replacement JavaScript or CSS.
-- Declare the WebUI protocol in `webui/client_contract.py`. The pre-existing terminal `protocolVersion` is a separate contract; do not overload it.
-- Use named capabilities for optional features and gate their controls and requests at their owning interface. Do not add compatibility fallbacks or negotiation solely to support older gateways.
-- Missing/malformed metadata means **compatibility unconfirmed**, not “old server,” “bad SSH key,” or “network error.” A matching package version alone does not validate the contract. An unconfirmed core contract cannot authorize mutations.
-- A package update being available is not proof of incompatibility. Optional update notices must use verified release data, be dismissible, and never interrupt an otherwise compatible session.
+- WebUI 与网关只支持并测试相同版本的组合，远程主机也一样。不同版本之间可能可以使用，但即使通过协议检查，也不保证兼容。排查问题时先统一版本；不要仅因软件包版本不同就拒绝连接。
+- 可执行的 WebUI 资源由本地安装提供。远程主机只提供经过身份验证的数据、事件和媒体，绝不能替换 JavaScript 或 CSS。
+- 在 `webui/client_contract.py` 中声明 WebUI 协议。现有终端的 `protocolVersion` 是独立约定，不要赋予它额外职责。
+- 对可选功能使用具名能力，并在所属接口控制其控件和请求。不要仅为支持旧网关添加兼容回退或协商逻辑。
+- 元数据缺失或格式错误表示**兼容性尚未确认**，而不是“旧服务器”“SSH 密钥错误”或“网络错误”。仅软件包版本相同并不代表约定有效。核心约定尚未确认时，不得授权变更操作。
+- 有可用的软件包更新并不证明存在不兼容。可选更新提示必须使用已验证的发布数据、允许关闭，并且不得打断原本兼容的会话。
 
-## Required proof for a changed contract
+## 约定变更所需的验证
 
-- Verify the current client with a same-version host. Cross-version compatibility fixtures or fallback behavior are not required.
-- For changes to contract validation, test unknown, missing, malformed and future metadata; overlapping and disjoint protocol ranges; unknown optional capabilities; and missing required capability.
-- Assert the actual public bootstrap/read/mutation/event behavior, not only a version-comparison helper.
-- Reconnect after a host restart or upgrade. Previously issued credentials and stale cached compatibility must not bypass a changed host contract.
-- Prove local HTML/JS/CSS are used even when remote static files are missing or different. Missing local assets fail locally, never fall back to remote code.
-- HTTP reads, streamed messages, upload/download, cancellation, multiple tabs, and a response arriving after switching hosts remain scoped to their host.
-- Preserve drafts/preferences without mixing authentication, model choices, conversation history, file paths, or command execution across host origins.
+- 使用相同版本的主机验证当前客户端。不要求跨版本兼容性夹具或回退行为。
+- 更改约定验证逻辑时，测试未知、缺失、格式错误及未来版本的元数据，重叠和不相交的协议范围，未知的可选能力，以及缺失的必需能力。
+- 断言实际的公开引导、读取、变更和事件行为，而不只是版本比较辅助函数。
+- 主机重启或升级后重新连接。以前签发的凭据和过期的兼容性缓存不得绕过已更改的主机约定。
+- 证明即使远端静态文件缺失或不同，也仍然使用本地 HTML/JS/CSS。本地资源缺失时应在本地报错，绝不能回退到远端代码。
+- HTTP 读取、流式消息、上传/下载、取消、多个标签页，以及切换主机后才到达的响应，都必须保持在其所属主机的范围内。
+- 保留草稿和偏好设置，同时不得跨主机来源混用身份验证、模型选择、对话历史、文件路径或命令执行。
 
-## Update UX and operator safety
+## 更新体验与操作安全
 
-- Report the local version, host version (or “not reported”), compatibility, and which machine needs updating without presenting a passing protocol check as a guarantee of cross-version functionality.
-- Show missing optional capabilities at the affected control. Block unsupported core sessions or operations.
-- Reuse the application's settings rows, menus and dialogs. Do not introduce a second settings drawer or a persistent global warning for an optional update.
-- Explain that updating this computer does not update its hosts. Use the installation environment that owns the running process: installer/uv/pipx/pip, checkout, container, and service-managed deployments are not interchangeable.
-- Never silently install, restart, downgrade, revoke credentials, or reset configuration. Back up configuration/data and consider active tasks before an explicitly requested update. Verify the running process after restart, not merely whichever `nanobot` executable happens to be on PATH.
-- Update user documentation with the change. Do not present planned support or fixture-only tests as a completed real-server acceptance test.
+- 报告本地版本、主机版本（或“未报告”）、兼容性，以及哪台机器需要更新，不要把通过协议检查说成跨版本功能正常的保证。
+- 在受影响的控件处显示缺失的可选能力。阻止不受支持的核心会话或操作。
+- 复用应用程序的设置行、菜单和对话框。不要为可选更新引入第二个设置抽屉或持续显示的全局警告。
+- 说明更新这台计算机并不会更新其主机。使用运行中进程所属的安装环境：安装程序/uv/pipx/pip、源码检出、容器和服务管理的部署方式不能互换。
+- 绝不能在不告知用户的情况下安装、重启、降级、撤销凭据或重置配置。在执行用户明确要求的更新之前，先备份配置/数据并考虑正在运行的任务。重启后要验证实际运行的进程，而不只是 PATH 上恰好找到的某个 `nanobot` 可执行文件。
+- 随更改更新用户文档。不要把计划中的支持或仅使用夹具的测试，说成已完成的真实服务器验收测试。
 
-## Current baseline
+## 当前基线
 
-WebUI protocol **1** with capability **`webui.core.v1`** is the initial explicit client/host contract. It covers the existing authenticated WebUI read, mutation, event, and media interfaces. Hosts predating this declaration are unconfirmed; local-client mode requires a gateway that declares a supported protocol and the required capabilities. Their independent server WebUI remains a separate way to use that installation. This is an intentional prerequisite for local-client mode, not a blanket claim that legacy nanobot installations no longer function.
+WebUI 协议 **1** 及能力 **`webui.core.v1`** 是最初明确的客户端/主机约定。它涵盖现有经过身份验证的 WebUI 读取、变更、事件和媒体接口。早于此声明的主机，其兼容性尚未确认；本地客户端模式要求网关声明受支持的协议和必需能力。这些主机独立的服务器 WebUI 仍是使用该安装的另一种方式。这是本地客户端模式有意设置的前提条件，并非笼统地宣称旧版 nanobot 安装已无法运行。

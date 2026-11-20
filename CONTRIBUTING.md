@@ -1,54 +1,54 @@
-# Contributing to nanobot
+# 为 nanobot 做贡献
 
-Thank you for being here.
+感谢你来到这里。
 
-nanobot is built with a simple belief: good tools should feel calm, clear, and humane. We care deeply about useful features, but we also believe in achieving more with less: solutions should be powerful without becoming heavy, and ambitious without becoming needlessly complicated.
+nanobot 的构建源于一个简单的信念：好的工具应当让人感到从容、清晰、人性化。我们非常重视实用的功能，同时也相信可以用更少的投入实现更多目标：解决方案应当强大而不笨重，有抱负而不必过度复杂。
 
-This guide is not only about how to open a PR. It is also about how we hope to build software together: with care, clarity, and respect for the next person reading the code.
+这份指南不仅介绍如何提交 PR，也阐述了我们希望如何共同构建软件：认真、清晰，并尊重下一位阅读代码的人。
 
-## Maintainers
+## 维护者
 
-Maintainers are community stewards who help review, organize, and maintain the project. The list below describes each maintainer's current open-source project responsibilities.
+维护者是社区的管理者，负责协助审查、组织和维护项目。下表列出了每位维护者目前在该开源项目中的职责。
 
-| Maintainer | Role |
+| 维护者 | 职责 |
 |------------|------|
-| [@re-bin](https://github.com/re-bin) | Project lead; reviews community PRs and handles merges |
-| [@chengyongru](https://github.com/chengyongru) | Reviews community PRs and may approve them; merges are handled by the project lead |
+| [@re-bin](https://github.com/re-bin) | 项目负责人；审查社区 PR 并负责合并 |
+| [@chengyongru](https://github.com/chengyongru) | 审查社区 PR，并可批准这些 PR；合并由项目负责人负责 |
 
-## Contribution Flow
+## 贡献流程
 
-### Discuss the Problem First
+### 先讨论问题
 
-We currently accept pull requests only from repository collaborators. [Issues](https://github.com/HKUDS/nanobot/issues) remain open to everyone: bug reports, clear reproduction steps, feature suggestions, and design discussions are all welcome.
+目前，我们只接受仓库协作者提交的 pull request。[Issues](https://github.com/HKUDS/nanobot/issues) 仍向所有人开放：欢迎报告 bug、提供清晰的复现步骤、提出功能建议和参与设计讨论。
 
-Generating code is becoming easier, but understanding changes, verifying correctness, and maintaining them still take substantial effort. Please start by discussing the problem, use case, and requirements in an issue before moving to implementation.
+生成代码正变得越来越容易，但理解改动、验证正确性和后续维护仍需投入大量精力。开始实现之前，请先在 issue 中讨论问题、使用场景和需求。
 
-### Recognition and Collaborator Invitations
+### 贡献认可与协作者邀请
 
-Contributing is not limited to submitting code. Finding a bug we missed, providing a key reproduction, or describing a valuable real-world use case all deserve acknowledgement.
+贡献并不局限于提交代码。发现我们遗漏的 bug、提供关键复现方法，或描述有价值的实际使用场景，都值得认可。
 
-For accepted issues, the issue author will also be credited as a co-author of the corresponding PR when it is merged.
+对于被采纳的 issue，对应的 PR 合并时，issue 作者也将被列为共同作者。
 
-Through these discussions and contributions, we hope to get to know people interested in long-term involvement and gradually invite them to become collaborators.
+我们希望通过这些讨论和贡献，结识有意长期参与项目的人，并逐步邀请他们成为协作者。
 
-### Pull Requests from Collaborators
+### 协作者提交 Pull Request
 
-Collaborators can open PRs for:
+协作者可以针对以下内容提交 PR：
 
-- New features or functionality
-- Bug fixes with no behavior changes
-- Documentation improvements
-- Minor tweaks that don't affect functionality
-- Refactoring that is clearly scoped and easy to review
-- Changes to APIs or configuration, when the impact is documented
+- 新特性或新功能
+- 不改变行为的 bug 修复
+- 文档改进
+- 不影响功能的小幅调整
+- 范围明确且易于审查的重构
+- API 或配置变更，但需说明其影响
 
-For riskier or larger changes, collaborators are encouraged to open a draft PR early after discussing the scope and approach in an issue.
+对于风险较高或规模较大的改动，建议协作者先在 issue 中讨论范围和方案，然后尽早提交草稿 PR。
 
-WebUI and remote-host interface changes must follow the [client/host compatibility review checklist](.agent/review-guide.md), including the same-version support policy, host isolation, and actionable update guidance.
+WebUI 和远程宿主接口的改动必须遵循[客户端/宿主兼容性审查清单](.agent/review-guide.md)，其中包括相同版本支持策略、宿主隔离以及可操作的更新指导。
 
-### Starting Work
+### 开始工作
 
-Before making changes, sync your local checkout and create a topic branch.
+进行改动前，请同步本地检出，并创建主题分支。
 
 ```bash
 git fetch upstream
@@ -57,40 +57,40 @@ git pull --ff-only upstream main
 git switch -c your-topic-branch
 ```
 
-Use your primary HKUDS/nanobot remote in place of `upstream` if your checkout uses a different remote name.
+如果你的检出使用了不同的远程仓库名称，请将 `upstream` 替换为你主要的 HKUDS/nanobot 远程仓库名称。
 
-Keep unrelated local changes out of the topic branch. If your checkout already has work in progress, use a separate worktree or finish that work before starting a new branch.
+不要让无关的本地改动进入主题分支。如果你的检出中已有正在进行的工作，请使用单独的 worktree，或在开始新分支前先完成这些工作。
 
-## Development Setup
+## 开发环境搭建
 
-For React/TypeScript work, follow the [WebUI development guide](webui/README.md) for HMR, source layout, and frontend checks. Channel-owned frontend code lives beside its channel; the guide covers those tests too.
+进行 React/TypeScript 相关工作时，请遵循 [WebUI 开发指南](webui/README.md)，了解 HMR、源码目录结构和前端检查。各渠道负责的前端代码位于对应渠道旁；指南也涵盖了这些代码的测试。
 
-Keep setup boring and reliable. The goal is to get you into the code quickly:
+环境搭建应当简单、可靠，目标是让你尽快开始编写代码：
 
 ```bash
-# Clone the repository
+# 克隆仓库
 git clone https://github.com/HKUDS/nanobot.git
 cd nanobot
 
-# Install with dev dependencies
+# 安装开发依赖
 pip install -e ".[dev]"
 
-# Run tests
+# 运行测试
 pytest
 
-# Lint code
+# 检查代码
 ruff check nanobot/
 
-# Format code — optional. The existing tree predates `ruff format`,
-# so running it broadly produces large unrelated diffs.
-# Do not mix mechanical formatting churn into a functional PR.
-# Use formatting only for the exact code your change intentionally touches.
+# 格式化代码——可选。现有代码树早于 `ruff format`，
+# 因此大范围运行它会产生大量无关差异。
+# 不要将机械格式化产生的大量改动混入功能性 PR。
+# 只格式化你的改动有意涉及的确切代码。
 ruff format <files-you-changed>
 ```
 
-### Strict Type Checking
+### 严格类型检查
 
-Strict type checking covers optional providers and channels. Reproduce the CI environment with the same dependency sources and commands:
+严格类型检查涵盖可选的 provider 和渠道。使用相同的依赖来源和命令复现 CI 环境：
 
 ```bash
 uv sync --all-extras --dev
@@ -98,71 +98,71 @@ uv run --no-sync python -m scripts.install_channel_dependencies --all-channels
 uv run --no-sync basedpyright
 ```
 
-Keep `--no-sync` on the final commands: channel dependencies come from their package manifests and are installed explicitly by the setup step.
+最后的命令要保留 `--no-sync`：渠道依赖来自各自的软件包清单，并由设置步骤显式安装。
 
-## Contribution License
+## 贡献许可
 
-By submitting a contribution, you confirm that you have the right to submit it and agree that it will be licensed under the project's MIT License.
+提交贡献即表示你确认自己有权提交该贡献，并同意该贡献依据项目的 MIT 许可证获得许可。
 
-## Code Style
+## 代码风格
 
-We care about more than passing lint. We want nanobot to stay small, calm, and readable.
+我们关注的不只是通过 lint 检查，还希望 nanobot 保持小巧、从容、易读。
 
-When contributing, please aim for code that feels:
+贡献代码时，请尽量让代码具备以下特点：
 
-- Simple: prefer the smallest change that solves the real problem
-- Clear: optimize for the next reader, not for cleverness
-- Decoupled: keep boundaries clean and avoid unnecessary new abstractions
-- Honest: do not hide complexity, but do not create extra complexity either
-- Durable: choose solutions that are easy to maintain, test, and extend
+- 简单：优先采用能够解决实际问题的最小改动
+- 清晰：为下一位读者优化，而不是为了炫技
+- 解耦：保持清晰的边界，避免不必要的新抽象
+- 务实：不要隐藏复杂性，也不要制造额外的复杂性
+- 持久：选择易于维护、测试和扩展的解决方案
 
-In practice:
+具体要求：
 
-- Line length: 100 characters (`ruff`)
-- Target: Python 3.11+
-- Linting: `ruff` with rules E, F, I, N, W (E501 ignored)
-- Async: uses `asyncio` throughout; pytest with `asyncio_mode = "auto"`
-- Prefer readable code over magical code
-- Prefer focused patches over broad rewrites
-- Do not mix mechanical formatting, line wrapping, import sorting, or quote churn into a feature or bugfix PR. If formatting cleanup is needed, make it a separate formatting-only PR.
-- If a new abstraction is introduced, it should clearly reduce complexity rather than move it around
+- 行长度：100 个字符（`ruff`）
+- 目标版本：Python 3.11+
+- Lint：使用 `ruff`，启用 E、F、I、N、W 规则（忽略 E501）
+- 异步：全面使用 `asyncio`；pytest 配置为 `asyncio_mode = "auto"`
+- 优先选择易读的代码，而不是晦涩难懂的代码
+- 优先选择范围集中的补丁，而不是大范围重写
+- 不要将机械格式化、换行、导入排序或引号风格的大量改动混入功能或 bug 修复 PR。如果需要清理格式，请单独提交仅包含格式调整的 PR。
+- 如果引入新的抽象，它应当明确降低复杂性，而不是只是将复杂性转移到别处
 
-## Modifying CI Workflows
+## 修改 CI 工作流
 
-If your PR touches `.github/workflows/`, please keep the CI within GitHub Actions' free tier:
+如果你的 PR 涉及 `.github/workflows/`，请确保 CI 不超出 GitHub Actions 的免费额度：
 
-- Use only standard GitHub-hosted runners (`ubuntu-latest`, `windows-latest`)
-- Avoid macOS runners, larger runners (`*-cores`, `*-xlarge`, `*-gpu`), and self-hosted runners
-- Avoid uploading large artifacts or using long retention
-- Avoid paid Marketplace actions
+- 仅使用 GitHub 托管的标准运行器（`ubuntu-latest`、`windows-latest`）
+- 避免使用 macOS 运行器、更大的运行器（`*-cores`、`*-xlarge`、`*-gpu`）和自托管运行器
+- 避免上传大型构件或设置过长的保留期限
+- 避免使用付费的 Marketplace 操作
 
-If your change genuinely needs to step outside this, please call it out explicitly in the PR description so it can be discussed before merge.
+如果你的改动确实需要超出上述范围，请在 PR 描述中明确说明，以便在合并前进行讨论。
 
-## Release Packaging Contract
+## 发布打包约定
 
-Use the [release checklist](./docs/releasing.md) for candidate preparation, package checks, documentation coordination, and the final publication handoff.
+候选版本准备、软件包检查、文档协调和最终发布交接，请使用[发布检查清单](./docs/releasing.md)。
 
-Stable feature releases and Stable patches are manual and share the same package workflow. Patches use generated change notes and update only affected documentation; they do not require a full wiki or promotional refresh. The Preview/dev line is intended for daily workflow delivery. The current first step supports opt-in daily candidate preparation only; publication remains separate and daily preparation is disabled by default. See the checklist for its activation boundary and remaining publication work.
+Stable 功能版本和 Stable 补丁均手动发布，并共用同一套打包流程。补丁使用生成的变更说明，只更新受影响的文档，无需全面更新 wiki 或宣传材料。Preview/dev 线用于交付日常工作流。目前，第一步仅支持按需启用每日候选版本准备；发布仍是独立步骤，且每日准备默认禁用。有关其启用边界和剩余的发布工作，请参阅检查清单。
 
-A stable install must never combine Python from one version with a TUI from another. Publish in this order:
+稳定版安装绝不能将一个版本的 Python 与另一个版本的 TUI 混合使用。请按以下顺序发布：
 
-1. Before pushing a tag, set the package version, verify the exact candidate, build the source distribution, all five platform wheels and TUI archives, and review licenses, source offer, and relinking materials. Obtain the maintainer's source-offer commitment before publication.
-2. Merge the release preparation, verify that its packaged sources match the checked candidate, then publish the matching GitHub release tag (`vX.Y.Z`). Recheck any changed sources first.
-3. Attach the preverified TUI archives and checksums to the matching GitHub Release. Alternatively, manually run **Publish Terminal UI** for the exact tag with the compliance review confirmed; reverify its outputs, since a rebuild does not preserve the preflight artifact hashes.
-4. Verify every platform archive and checksum is publicly downloadable for fallback/source-built installations, then publish the same `X.Y.Z` source distribution and five platform wheels to PyPI.
+1. 推送标签前，设置软件包版本，验证确切的候选版本，构建源码分发包、全部五个平台的 wheel 和 TUI 归档，并审查许可证、源码提供承诺和重新链接材料。发布前，取得维护者的源码提供承诺。
+2. 合并发布准备改动，验证其打包源码与已检查的候选版本一致，然后发布对应的 GitHub 发布标签（`vX.Y.Z`）。如果源码有任何改动，请先重新检查。
+3. 将预先验证的 TUI 归档和校验和附加到对应的 GitHub Release。也可以针对确切标签手动运行 **Publish Terminal UI**，并确认已完成合规审查；随后重新验证其输出，因为重新构建不会保留预检构件的哈希值。
+4. 确认每个平台的归档和校验和均可公开下载，以供回退安装或从源码构建的安装使用，然后将同一 `X.Y.Z` 版本的源码分发包和五个平台的 wheel 发布到 PyPI。
 
-Each platform wheel contains the built WebUI and the matching native TUI. Pip chooses the wheel for the user's machine; launching the installed TUI must work without a GitHub download or Bun. The universal wheel produced by `uv build` is only an intermediate: use `scripts/build_tui_wheels.py` as described in the checklist, and do not upload that intermediate. The source distribution remains platform-neutral and does not bundle native binaries. Keep the platform-specific release archives for fallback/source-built installations. Both the wheel's `nanobot/tui/bin/` bundle and its matching archive must contain the executable, target-specific third-party notices, project and runtime licenses, corresponding application source, a written source offer, relinking instructions, and a checksum manifest. Never upload a naked TUI executable. Review the minimum OS, libc, architecture and runtime CPU requirements when changing Bun/OpenTUI; never apply portable platform tags without checking their binaries. Source checkouts use an editable Python install, run `tui/` with Bun, and rebuild stale `webui/` assets locally.
+每个平台的 wheel 都包含构建好的 WebUI 和与之匹配的原生 TUI。Pip 会为用户的机器选择相应的 wheel；启动已安装的 TUI 时，必须无需从 GitHub 下载，也无需 Bun。`uv build` 生成的通用 wheel 只是中间产物：请按照检查清单中的说明使用 `scripts/build_tui_wheels.py`，不要上传该中间产物。源码分发包仍与平台无关，不捆绑原生二进制文件。请保留平台专用的发布归档，以供回退安装或从源码构建的安装使用。wheel 的 `nanobot/tui/bin/` 包及与之匹配的归档，都必须包含可执行文件、针对目标平台的第三方声明、项目和运行时许可证、对应的应用程序源码、书面源码提供承诺、重新链接说明和校验和清单。绝不要只上传一个 TUI 可执行文件。更改 Bun/OpenTUI 时，请检查最低 OS、libc、架构和运行时 CPU 要求；未经检查其二进制文件，绝不要应用可移植平台标签。源码检出使用可编辑的 Python 安装，通过 Bun 运行 `tui/`，并在本地重新构建过期的 `webui/` 资源。
 
-The confirmation is an operational commitment, not a cosmetic checkbox. Before accepting it, verify that the exact Bun/WebKit revisions remain retrievable and that the project can honor the archive's corresponding-source offer for its full stated period. Preserve published archives and their source materials.
+这项确认是一项运营承诺，而不是走形式的勾选项。接受该承诺前，请验证确切的 Bun/WebKit 修订版本仍可获取，并确认项目能够在承诺的完整期限内履行归档的对应源码提供承诺。请保留已发布的归档及其源码材料。
 
-## Questions?
+## 有疑问？
 
-If you have questions, ideas, or half-formed insights, you are warmly welcome here.
+如果你有任何问题、想法或尚未成形的见解，我们都非常欢迎。
 
-Please feel free to open an [issue](https://github.com/HKUDS/nanobot/issues), join the community, or simply reach out:
+欢迎随时提交 [issue](https://github.com/HKUDS/nanobot/issues)、加入社区，或直接联系我们：
 
 - [Discord](https://discord.gg/MnCvHqpUGB)
-- [Feishu/WeChat](./COMMUNICATION.md)
-- Email: Xubin Ren (@Re-bin) — <xubinrencs@gmail.com>
+- [飞书/微信](./COMMUNICATION.md)
+- 电子邮件：Xubin Ren (@Re-bin) — <xubinrencs@gmail.com>
 
-Thank you for spending your time and care on nanobot. We would love for more people to participate in this community, and we genuinely welcome contributions of all sizes.
+感谢你为 nanobot 投入时间和心力。我们希望更多人参与这个社区，也真诚欢迎各种规模的贡献。

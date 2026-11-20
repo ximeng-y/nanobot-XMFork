@@ -1,26 +1,26 @@
-# Simplify with judgment
+# 审慎地简化代码
 
-Use this guidance when cleaning up code, choosing between a patch and a refactor, or deciding whether a test earns its maintenance cost.
+清理代码、选择打补丁还是重构，或者判断一项测试是否值得付出维护成本时，请遵循以下指导。
 
-## Think before extending the code
+## 扩展代码前先思考
 
-Work out the required behavior, the facts available at the boundary, who owns each piece of state, and what actually causes the failure. Then choose the simplest coherent implementation. Do not begin by asking where another condition can be inserted into the current code.
+先弄清楚所需行为、边界处已有的事实、各项状态的归属，以及导致故障的真正原因，再选择最简单且连贯的实现。不要一开始就考虑能在当前代码的哪个位置再加一个条件。
 
-Use your judgment. You are expected to understand the problem, not merely keep the current code limping along. If a solution needs another fallback, ask which broken contract it hides. If a helper needs more modes, ask whether it owns too many responsibilities. If the implementation is hard to explain, reconsider the design before adding another layer.
+运用你的判断力。你应该理解问题，而不只是勉强维持现有代码运行。如果一个方案需要再增加回退逻辑，先问它掩盖了哪项失效的约定；如果一个辅助函数需要支持更多模式，先问它是否承担了过多职责；如果实现难以解释，先重新考虑设计，不要再叠加一层。
 
-## Refactor when the structure is the problem
+## 结构是问题根源时就重构
 
-Refactor the owning path when it removes the cause: duplicated state, contradictory ownership, tangled control flow, or an abstraction that no longer fits its callers. Keep that refactor tied to the requested behavior and preserve unaffected contracts. A small diff is not a success if it leaves the defect embedded in the design.
+如果重构负责相关功能的代码路径能消除问题根源，例如重复状态、相互矛盾的归属、纠缠的控制流或不再适合调用方的抽象，就进行重构。重构应紧扣所要求的行为，并保留不受影响的约定。如果小 diff 仍将缺陷留在设计中，就不能算成功。
 
-Remove redundant checks inside trusted, validated paths. Validate untrusted input at its boundary and let internal code use that contract. Keep fallbacks only for supported, reachable failure modes with a defined result. Do not silently recover from broken internal invariants, retain speculative compatibility paths, or introduce frameworks for hypothetical future requirements. Preserve deliberate security checks and documented recovery contracts.
+删除受信任且已验证路径中的冗余检查。在边界处验证不可信输入，让内部代码直接遵循这项约定。只针对受支持、可达且有明确结果的失败模式保留回退逻辑。不要悄悄从被破坏的内部不变量中恢复，不要保留基于猜测的兼容路径，也不要为假想的未来需求引入框架。保留有意设置的安全检查和已文档化的恢复约定。
 
-## Tests must earn their place
+## 测试必须物有所值
 
-Prefer evidence for the supported user path and the important reachable regression. Reuse existing coverage when it already proves the contract.
+优先为受支持的用户路径和重要的可达回归收集证据。现有覆盖已经能够证明行为约定时，直接复用。
 
-- Do not add defensive cases for impossible internal states, unsupported combinations, or hypothetical failures without a reachable path and a material consequence.
-- Avoid exhaustive mock permutations, assertions that mirror private implementation steps, and tests that merely prove old text or symbols disappeared.
-- A prose edit, mechanical cleanup, or low-impact reversible change does not automatically need new tests. Use focused existing checks when sufficient.
-- Test invalid input where a real untrusted boundary accepts it, security properties where a real capability exposes them, and recovery where the product promises it. These are supported contracts, not an invitation to test every imagined failure.
+- 不要为不可能出现的内部状态、不受支持的组合，或没有可达路径和实质影响的假想故障添加防御性测试。
+- 避免穷举 mock 排列、照搬私有实现步骤的断言，以及仅仅证明旧文本或符号已经消失的测试。
+- 文案编辑、机械清理或影响很小且可逆的更改并不自动需要新测试。现有针对性检查足够时就使用它们。
+- 真实不可信边界接受无效输入、实际能力涉及安全属性，或产品承诺支持恢复时，分别测试这些情况。这些是受支持的行为约定，并不意味着要测试所有能想到的故障。
 
-Choose each test because it could detect a meaningful contract failure. Once the relevant evidence is sufficient, stop adding cases.
+每项测试都应能发现有意义的行为约定失效。相关证据足够后，就停止增加用例。

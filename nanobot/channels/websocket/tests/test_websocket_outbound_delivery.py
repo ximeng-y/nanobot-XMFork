@@ -529,7 +529,11 @@ async def test_shell_output_is_literal_without_changing_other_command_replies(
     channel._attach(cast(Any, connection), "shell-output")
     output = "Path\n----\n  __pycache__\n```mermaid\nflowchart LR\n```\n![preview](local.png)\n"
     rewritten = output.replace("local.png", "/api/media/signed")
-    monkeypatch.setattr(channel.gateway.media, "rewrite_local_markdown_images", lambda text: rewritten)
+    monkeypatch.setattr(
+        channel.gateway.media,
+        "rewrite_local_markdown_images",
+        lambda text, **_: rewritten,
+    )
     message = await history.message(
         channel="websocket", chat_id="shell-output", content=output,
         metadata={"render_as": "text", INBOUND_META_USER_SHELL: user_shell},

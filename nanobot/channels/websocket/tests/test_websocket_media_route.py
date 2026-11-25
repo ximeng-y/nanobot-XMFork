@@ -200,6 +200,7 @@ def test_local_markdown_image_rejects_workspace_escape(
     outside = tmp_path / "outside.png"
     outside.write_bytes(_PNG_BYTES)
     media = tmp_path / "media"
+    (media / "websocket").mkdir(parents=True)
     channel = _ch(bus, workspace_path=workspace, port=0)
     text = "![nope](../outside.png)"
 

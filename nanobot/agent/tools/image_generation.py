@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from nanobot.attachments.store import AttachmentCapacityError
 from nanobot.agent.tools.base import Tool, ToolResult, tool_parameters
 from nanobot.agent.tools.image_generation_config import ImageGenerationToolConfig
 from nanobot.agent.tools.registry import ToolRegistry
@@ -17,6 +18,7 @@ from nanobot.agent.tools.schema import (
 )
 from nanobot.config.network import NetworkConfig
 from nanobot.config.paths import get_media_dir
+from nanobot.agent.tools.context import current_request_session_key
 from nanobot.providers.image_generation import (
     ImageGenerationError,
     ImageGenerationProvider,
@@ -33,6 +35,7 @@ from nanobot.utils.artifacts import (
 from nanobot.utils.helpers import detect_image_mime
 
 if TYPE_CHECKING:
+    from nanobot.attachments.service import AttachmentService
     from nanobot.agent.tools.context import ToolContext
     from nanobot.config.schema import Config, ProviderConfig
 
@@ -81,6 +84,7 @@ class ImageGenerationTool(Tool):
             config=ctx.config.image_generation,
             provider_configs=image_gen_provider_configs(ctx.providers_config),
             network=ctx.network,
+            attachment_service=ctx.attachment_service,
         )
 
     def __init__(
@@ -91,11 +95,13 @@ class ImageGenerationTool(Tool):
         provider_config: ProviderConfig | None = None,
         provider_configs: dict[str, ProviderConfig] | None = None,
         network: NetworkConfig | None = None,
+        attachment_service: AttachmentService | None = None,
     ) -> None:
         self.workspace = Path(workspace).expanduser()
         self.config = config
         self.network = network or NetworkConfig()
         self.provider_configs = dict(provider_configs or {})
+        self.attachment_service = attachment_service
         if provider_config is not None and "openrouter" not in self.provider_configs:
             self.provider_configs["openrouter"] = provider_config
 
@@ -200,12 +206,14 @@ class ImageGenerationTool(Tool):
                         source_images=refs,
                         save_dir=self.config.save_dir,
                         provider=self.config.provider,
+                        session_key=current_request_session_key(),
+                        attachment_service=self.attachment_service,
                     )
                     artifacts.append(artifact)
                     if len(artifacts) >= requested:
                         break
             return generated_image_tool_result(artifacts)
-        except (ArtifactError, ImageGenerationError, OSError) as exc:
+        except (ArtifactError, AttachmentCapacityError, ImageGenerationError, OSError) as exc:
             return ToolResult.error(f"Error: {exc}")
 
 

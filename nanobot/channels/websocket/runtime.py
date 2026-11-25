@@ -633,6 +633,7 @@ class WebSocketChannel(BaseChannel):
 
     async def start(self) -> None:
         await self._outbound.initialize()
+        await asyncio.to_thread(self.gateway.attachments.reconcile)
         self.gateway.http.remote_instances.resume()
         from nanobot.utils.logging_bridge import redirect_lib_logging
 
@@ -680,6 +681,10 @@ class WebSocketChannel(BaseChannel):
         async def prune_uploads() -> None:
             while not stop_event.is_set():
                 self._uploads.store.prune()
+                try:
+                    await asyncio.to_thread(self.gateway.attachments.cleanup_if_due)
+                except Exception:
+                    self.logger.exception("Managed attachment cleanup failed")
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=30)
                 except TimeoutError:

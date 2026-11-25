@@ -7,10 +7,13 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from nanobot.config.paths import get_media_dir
 from nanobot.utils.helpers import detect_image_mime, ensure_dir
+
+if TYPE_CHECKING:
+    from nanobot.attachments.service import AttachmentService
 
 _DATA_IMAGE_RE = re.compile(r"^data:(image/[A-Za-z0-9.+-]+);base64,(.*)$", re.DOTALL)
 _MIME_EXTENSIONS = {
@@ -73,6 +76,8 @@ def store_generated_image_artifact(
     save_dir: str = "generated",
     provider: str = "openrouter",
     created_at: datetime | None = None,
+    session_key: str | None = None,
+    attachment_service: AttachmentService | None = None,
 ) -> dict[str, Any]:
     """Persist a generated image and sidecar metadata under the media root."""
     raw, mime = decode_image_data_url(data_url)
@@ -86,7 +91,6 @@ def store_generated_image_artifact(
     image_path = day_dir / f"{artifact_id}{ext}"
     metadata_path = day_dir / f"{artifact_id}.json"
 
-    image_path.write_bytes(raw)
     metadata: dict[str, Any] = {
         "id": artifact_id,
         "path": str(image_path),
@@ -97,10 +101,34 @@ def store_generated_image_artifact(
         "source_images": list(source_images or []),
         "created_at": now.isoformat(),
     }
-    metadata_path.write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    metadata_text = json.dumps(metadata, ensure_ascii=False, indent=2)
+    reservation = None
+    registered = attachment_service is not None and bool(session_key)
+    if registered:
+        assert attachment_service is not None
+        reservation = attachment_service.reserve(
+            len(raw) + len(metadata_text.encode("utf-8")),
+            purpose="generated-image",
+        )
+    try:
+        image_path.write_bytes(raw)
+        metadata_path.write_text(metadata_text, encoding="utf-8")
+        if registered:
+            assert attachment_service is not None
+            assert reservation is not None
+            attachment_service.register_generated(
+                image_path,
+                metadata_path,
+                session_key=cast(str, session_key),
+                metadata=metadata,
+                reservation=reservation,
+            )
+    except BaseException:
+        image_path.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        if reservation is not None:
+            reservation.release()
+        raise
     return metadata
 
 

@@ -121,6 +121,7 @@ from nanobot.utils.runtime import (
 )
 
 if TYPE_CHECKING:
+    from nanobot.attachments.service import AttachmentService
     from nanobot.config.schema import (
         ChannelsConfig,
         Config,
@@ -312,6 +313,7 @@ class AgentLoop:
         local_trigger_store: LocalTriggerStore | None = None,
         idle_compact_check_interval_seconds: int = 0,
         recovery_admission: RecoveryAdmission | None = None,
+        attachment_service: AttachmentService | None = None,
         builtin_assembly: Callable[[SessionManager, MessageBus, ToolRegistry, CommandRouter], ExecutionPolicy] | None = None,
     ):
         from nanobot.config.schema import ToolsConfig
@@ -368,6 +370,7 @@ class AgentLoop:
         self.exec_config = _tc.exec
         self.cron_service = cron_service
         self.local_trigger_store = local_trigger_store
+        self.attachment_service = attachment_service
         self.restrict_to_workspace = restrict_to_workspace
         self.workspace_scopes = WorkspaceScopeResolver(
             default_workspace=workspace,
@@ -481,6 +484,14 @@ class AgentLoop:
             extra["session_manager"] = SessionManager(
                 config.workspace_path,
                 sessions_root=data_dir / "sessions" if data_dir is not None else None,
+            )
+        if "attachment_service" not in extra and config.runtime_data_dir is not None:
+            from nanobot.attachments.runtime import get_attachment_service
+
+            extra["attachment_service"] = get_attachment_service(
+                data_dir=config.runtime_data_dir,
+                sessions_root=config.runtime_data_dir / "sessions",
+                config=config.attachments,
             )
         provider = extra.pop("provider", None) or make_provider(config)
         resolved = config.resolve_preset()
@@ -664,6 +675,7 @@ class AgentLoop:
             cron_service=self.cron_service,
             exec_session_manager=self._exec_session_manager,
             sessions=self.sessions,
+            attachment_service=self.attachment_service,
             provider_snapshot_loader=provider_snapshot_loader,
             timezone=self.context.timezone or "UTC",
             workspace_sandbox=self.workspace_scopes.sandbox_status,
@@ -753,7 +765,12 @@ class AgentLoop:
                 self.context.build_user_content, text, image_paths=media_paths,
             ) if media_paths else text
             if isinstance(user_content, list) and session.policy.persist:
-                user_content = await shield_and_drain(asyncio.to_thread(persist_user_image_blocks, user_content))
+                user_content = await shield_and_drain(asyncio.to_thread(
+                    persist_user_image_blocks,
+                    user_content,
+                    session_key=session.key,
+                    attachment_service=self.attachment_service,
+                ))
             content, runtime_context_meta = append_runtime_context(user_content, runtime_context_blocks or ())
             if runtime_context_meta is not None:
                 extra[RUNTIME_CONTEXT_HISTORY_META] = runtime_context_meta
@@ -2508,7 +2525,11 @@ class AgentLoop:
                 if not content:
                     continue
                 if store_images and session.policy.persist:
-                    entry["content"] = persist_user_image_blocks(cast(list[object], content))
+                    entry["content"] = persist_user_image_blocks(
+                        cast(list[object], content),
+                        session_key=session.key,
+                        attachment_service=self.attachment_service,
+                    )
             entry.setdefault("timestamp", datetime.now().isoformat())
             session.messages.append(entry)
             if role == "user" and isinstance(followup_id, str) and followup_id:

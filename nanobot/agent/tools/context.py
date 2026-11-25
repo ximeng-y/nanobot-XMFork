@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from nanobot.config.network import NetworkConfig
 
 if TYPE_CHECKING:
+    from nanobot.attachments.service import AttachmentService
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.exec_session import ExecSessionManager
     from nanobot.agent.tools.file_state import FileStates
@@ -99,6 +100,7 @@ class ToolContext:
     cron_service: CronService | None = None
     exec_session_manager: ExecSessionManager | None = None
     sessions: SessionManager | None = None
+    attachment_service: AttachmentService | None = None
     file_state_store: FileStates | None = None
     provider_snapshot_loader: Callable[..., ProviderSnapshot] | None = None
     providers_config: ProvidersConfig | None = None

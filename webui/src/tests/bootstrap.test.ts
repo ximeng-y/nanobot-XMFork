@@ -6,6 +6,18 @@ import {
   fetchBootstrap,
 } from "@/lib/bootstrap";
 
+const LIMITS = {
+  transport: { max_frame_bytes: 1_048_576, envelope_reserve_bytes: 65_536 },
+  message: { max_text_bytes: 65_536 },
+  attachments: {
+    max_count: 4,
+    max_file_bytes: 6_291_456,
+    max_total_bytes: 25_165_824,
+    max_video_count: 1,
+    max_video_bytes: 20_971_520,
+  },
+};
+
 describe("bootstrap helpers", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -79,7 +91,11 @@ describe("bootstrap helpers", () => {
       "fetch",
       vi.fn(async () => ({
         ok: true,
-        json: async () => ({ ws_path: "/", ws_url: "wss://proxy.example/" }),
+        json: async () => ({
+          ws_path: "/",
+          ws_url: "wss://proxy.example/",
+          limits: LIMITS,
+        }),
       })),
     );
 
@@ -87,6 +103,23 @@ describe("bootstrap helpers", () => {
       ws_path: "/",
       ws_url: "wss://proxy.example/",
     });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["invalid", { ...LIMITS, attachments: { ...LIMITS.attachments, max_video_count: 0 } }],
+  ])("rejects a bootstrap response with %s attachment limits", async (_label, limits) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ ws_path: "/", limits }),
+      })),
+    );
+
+    await expect(fetchBootstrap()).rejects.toThrow(
+      "bootstrap response has invalid attachment limits",
+    );
   });
 
   it("consumes bootstrap secrets from the URL fragment", () => {

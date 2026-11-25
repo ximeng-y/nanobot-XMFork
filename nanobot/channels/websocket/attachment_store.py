@@ -16,7 +16,8 @@ from pathlib import Path
 
 from nanobot.channels.websocket.attachment_policy import (
     DOCUMENT_MIME_ALLOWED,
-    MAX_VIDEOS_PER_MESSAGE,
+    DEFAULT_MAX_PENDING,
+    DEFAULT_MAX_PENDING_BYTES,
     UPLOAD_IDLE_TIMEOUT_SECONDS,
     UPLOAD_MIME_ALLOWED,
     UPLOAD_TIMEOUT_SECONDS,
@@ -54,8 +55,8 @@ class AttachmentStore:
         media_dir: Path,
         *,
         limits: AttachmentIngressLimits | None = None,
-        max_pending: int = 128,
-        max_pending_bytes: int = 128 * 1024 * 1024,
+        max_pending: int = DEFAULT_MAX_PENDING,
+        max_pending_bytes: int = DEFAULT_MAX_PENDING_BYTES,
         ttl_seconds: float = 600,
         upload_timeout: float = UPLOAD_TIMEOUT_SECONDS,
         upload_idle_timeout: float = UPLOAD_IDLE_TIMEOUT_SECONDS,
@@ -99,9 +100,14 @@ class AttachmentStore:
         except ValueError as exc:
             raise AttachmentUploadError(str(exc)) from exc
         if self._active + len(self._entries) >= self.max_pending:
-            raise AttachmentUploadError("Too many pending attachments")
+            raise AttachmentUploadError(
+                f"Too many pending attachments (maximum {self.max_pending})"
+            )
         if self._reserved_bytes + size > self.max_pending_bytes:
-            raise AttachmentUploadError("Pending attachment storage is full")
+            raise AttachmentUploadError(
+                "Pending attachment storage is full "
+                f"(maximum {self.max_pending_bytes:,} bytes)"
+            )
         self._active += 1
         self._reserved_bytes += size
         path: Path | None = None
@@ -154,8 +160,10 @@ class AttachmentStore:
     def inspect(self, references: list[str], *, owner: str) -> list[StagedAttachment]:
         """Validate a complete batch without consuming it, allowing send retries."""
         self.prune()
-        if len(references) > self.limits.max_count + MAX_VIDEOS_PER_MESSAGE:
-            raise AttachmentUploadError("Too many attachments")
+        if len(references) > self.limits.max_attachments:
+            raise AttachmentUploadError(
+                f"Too many attachments (maximum {self.limits.max_attachments})"
+            )
         if len(set(references)) != len(references):
             raise AttachmentUploadError("Duplicate attachment reference")
         entries: list[StagedAttachment] = []

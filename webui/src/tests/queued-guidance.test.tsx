@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ThreadComposer } from "@/components/thread/ThreadComposer";
+import { ThreadComposer as ProductionThreadComposer } from "@/components/thread/ThreadComposer";
 import type { SessionMention, SlashCommand, WebUIIngressLimits } from "@/lib/types";
 import { ComposerDraftStore } from "@/lib/composer-draft";
 import { formatQuotedUserMessage } from "@/lib/user-message-quote";
@@ -23,8 +24,19 @@ function limits(attachments: Partial<WebUIIngressLimits["attachments"]> = {}, ma
   return {
     transport: { max_frame_bytes: 1024 * 1024, envelope_reserve_bytes: 1024 },
     message: { max_text_bytes: maxTextBytes },
-    attachments: { max_count: 4, max_file_bytes: 6 * 1024 * 1024, max_total_bytes: 24 * 1024 * 1024, ...attachments },
+    attachments: {
+      max_count: 4,
+      max_file_bytes: 6 * 1024 * 1024,
+      max_total_bytes: 24 * 1024 * 1024,
+      max_video_count: 1,
+      max_video_bytes: 20 * 1024 * 1024,
+      ...attachments,
+    },
   };
+}
+
+function ThreadComposer(props: ComponentProps<typeof ProductionThreadComposer>) {
+  return <ProductionThreadComposer ingressLimits={limits()} {...props} />;
 }
 
 function enter(text: string): void {
@@ -135,7 +147,31 @@ describe("merged waiting messages", () => {
     expect(within(screen.getByTestId("composer-chip")).getByRole("img", { name: "second.png" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Waiting to send" })).toHaveTextContent("first.png");
     expect(screen.getByText(error, { exact: false })).toBeInTheDocument();
+    if ("max_total_bytes" in policy) expect(screen.getByText(error, { exact: false })).toHaveTextContent("9 B");
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("sends a waiting message with a configured multi-video allowance", () => {
+    const videos = [
+      { dataUrl: "data:video/mp4;base64,b25l", kind: "video", name: "one.mp4" },
+      { dataUrl: "data:video/mp4;base64,dHdv", kind: "video", name: "two.mp4" },
+    ];
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
+      { id: "videos", text: "compare", images: videos },
+    ]));
+    const onSend = vi.fn();
+    render(<ThreadComposer
+      onSend={onSend}
+      pendingQueueKey="chat-a"
+      ingressLimits={limits({ max_video_count: 2 })}
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send now" }));
+
+    expect(onSend).toHaveBeenCalledWith("compare", [
+      expect.objectContaining({ media: { data_url: videos[0].dataUrl, name: "one.mp4" } }),
+      expect.objectContaining({ media: { data_url: videos[1].dataUrl, name: "two.mp4" } }),
+    ]);
   });
 
   it("lets users edit an oversized legacy aggregate without dropping excess attachments", () => {

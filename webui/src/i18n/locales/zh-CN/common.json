@@ -935,7 +935,7 @@
     "appearance": {
       "background": "背景图片",
       "backgroundChoose": "选择图片",
-      "backgroundTooLarge": "图片不能超过 6 MiB",
+      "backgroundTooLarge": "图片不能超过 {{max}}",
       "backgroundFade": "背景淡化",
       "backgroundBlur": "模糊程度",
       "backgroundReplace": "更换图片",
@@ -2302,12 +2302,12 @@
         "unsupported_type": "不支持的文件类型",
         "empty_file": "不能附加空文件",
         "too_many_attachments": "每条消息最多 {{max}} 个附件",
-        "too_many_videos": "每条消息最多 1 个视频",
+        "too_many_videos": "每条消息最多 {{max}} 个视频",
         "too_many_images": "每条消息最多 {{max}} 张图片",
         "magic_mismatch": "文件看起来不像真实的图片",
         "decode_failed": "无法解码这张图片",
         "too_large": "文件为 {{size}}，超过上传上限 {{max}}",
-        "total_too_large": "附件总大小过大，请移除部分文件或使用更小的文件",
+        "total_too_large": "附件总大小超过 {{max}}，请移除部分文件或使用更小的文件",
         "io": "无法读取该文件"
       },
       "workspace": {

@@ -935,7 +935,7 @@
     "appearance": {
       "background": "Background",
       "backgroundChoose": "Choose image",
-      "backgroundTooLarge": "Image must be 6 MiB or smaller.",
+      "backgroundTooLarge": "Image must be {{max}} or smaller.",
       "backgroundFade": "Background fade",
       "backgroundBlur": "Blur",
       "backgroundReplace": "Change image",
@@ -2302,12 +2302,12 @@
         "unsupported_type": "Unsupported file type",
         "empty_file": "Empty files cannot be attached",
         "too_many_attachments": "Max {{max}} attachments per message",
-        "too_many_videos": "Max 1 video per message",
+        "too_many_videos": "Max {{max}} videos per message",
         "too_many_images": "Max {{max}} images per message",
         "magic_mismatch": "File doesn't look like a real image",
         "decode_failed": "Couldn't decode this image",
         "too_large": "File is too large to upload ({{size}}; maximum {{max}})",
-        "total_too_large": "Attachments are too large together — remove some or use smaller files",
+        "total_too_large": "Attachments are too large together (max {{max}}) — remove some or use smaller files",
         "io": "Couldn't read this file"
       },
       "workspace": {

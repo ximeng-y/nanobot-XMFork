@@ -61,16 +61,16 @@ function newId(): string {
 
 /** Encode off the main thread when possible. Validation and encoding failures
  * return ``{ok: false, reason}``; Worker and message-transport failures reject. */
-export async function encodeImage(file: File): Promise<EncodeResponse> {
+export async function encodeImage(file: File, maxBytes: number): Promise<EncodeResponse> {
   const id = newId();
   const w = bootWorker();
   if (!w) {
-    return encodeImageInWorker({ id, file });
+    return encodeImageInWorker({ id, file, maxBytes });
   }
   return new Promise<EncodeResponse>((resolve, reject) => {
     pending.set(id, { resolve, reject });
     try {
-      w.postMessage({ id, file });
+      w.postMessage({ id, file, maxBytes });
     } catch (err) {
       pending.delete(id);
       reject(err instanceof Error ? err : new Error(String(err)));

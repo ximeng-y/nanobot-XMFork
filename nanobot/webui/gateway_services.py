@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger as default_logger
 
+from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.attachment_http import AttachmentHTTP
 from nanobot.channels.websocket.attachment_store import AttachmentStore
 from nanobot.config.loader import get_config_path
@@ -14,7 +15,7 @@ from nanobot.config.paths import get_media_dir
 from nanobot.webui.automation_routes import WebUIAutomationRoutes
 from nanobot.webui.gateway_endpoint import WebUIGatewayEndpoint
 from nanobot.webui.gateway_tokens import GatewayTokenStore
-from nanobot.webui.ingress_policy import DEFAULT_WEBUI_INGRESS_POLICY, WebUIIngressPolicy
+from nanobot.webui.ingress_policy import WebUIIngressPolicy
 from nanobot.webui.media_gateway import WebUIMediaGateway
 from nanobot.webui.session_projection import WebUISessionProjection
 from nanobot.webui.settings_services import WebUISettingsServices
@@ -93,7 +94,13 @@ def build_gateway_services(
         refresh_runtime_config=refresh_runtime_config,
     )
     tokens = GatewayTokenStore()
-    ingress = DEFAULT_WEBUI_INGRESS_POLICY
+    ingress = WebUIIngressPolicy(attachments=AttachmentIngressLimits(
+        max_count=config.uploads.max_count,
+        max_file_bytes=config.uploads.max_file_bytes,
+        max_total_bytes=config.uploads.max_total_bytes,
+        max_video_count=config.uploads.max_video_count,
+        max_video_bytes=config.uploads.max_video_bytes,
+    ))
     minimum_frame_bytes = ingress.minimum_full_policy_frame_bytes()
     if config.max_message_bytes < minimum_frame_bytes:
         logger.warning(
@@ -107,7 +114,10 @@ def build_gateway_services(
         logger=logger,
     )
     uploads = AttachmentHTTP(AttachmentStore(
-        get_media_dir("websocket"), limits=ingress.attachments,
+        get_media_dir("websocket"),
+        limits=ingress.attachments,
+        max_pending=config.uploads.max_pending,
+        max_pending_bytes=config.uploads.max_pending_bytes,
     ))
     transcripts = WebUITranscriptRecorder(session_manager, log=logger)
     workspaces = WebUIWorkspaceController(

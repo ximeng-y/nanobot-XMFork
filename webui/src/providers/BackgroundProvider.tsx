@@ -2,6 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useClient } from "@/providers/ClientProvider";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
 import { fetchWithTimeout } from "@/lib/http";
+import { formatBytes } from "@/lib/utils";
+
+const MAX_BACKGROUND_BYTES = 6 * 1024 * 1024;
 
 interface BackgroundContextValue {
   hasBackground: boolean;
@@ -14,6 +17,8 @@ interface BackgroundContextValue {
   loadError: boolean;
   retry: () => void;
   error: boolean;
+  uploadError: string | null;
+  uploadMaxBytes: number | null;
   upload: (file: File) => Promise<boolean>;
   remove: () => Promise<boolean>;
   clearError: () => void;
@@ -26,14 +31,18 @@ export function useBackground() {
 }
 
 export function BackgroundProvider({ children }: { children: ReactNode }) {
-  const { client, token, getToken } = useClient();
+  const { client, token, getToken, ingressLimits } = useClient();
   const hasToken = !!token;
+  const uploadMaxBytes = ingressLimits
+    ? Math.min(MAX_BACKGROUND_BYTES, ingressLimits.attachments.max_file_bytes)
+    : null;
   const [image, setImage] = useState<Blob | null>(null);
   const imageUrl = useObjectUrl(image);
   const [blur, setBlurState] = useState(5);
   const [veil, setVeilState] = useState(88);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [imageStatus, setImageStatus] = useState<"loading" | "ready" | "error">("loading");
   const [styleStatus, setStyleStatus] = useState<"loading" | "ready" | "error">("loading");
   const versions = useRef({ image: 0, style: 0 });
@@ -105,17 +114,30 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
   }, [blur, veil]);
 
   const upload = async (file: File) => {
-    setBusy(true); setError(false);
+    setError(false);
+    setUploadError(null);
+    if (uploadMaxBytes === null) {
+      setUploadError("Background upload limits are not available yet.");
+      return false;
+    }
+    if (file.size > uploadMaxBytes) {
+      setUploadError(`Image exceeds the ${formatBytes(uploadMaxBytes)} upload limit.`);
+      return false;
+    }
+    setBusy(true);
     const version = ++versions.current.image;
     try {
       await client.uploadBackground(file);
       if (versions.current.image === version) { setImage(file); setImageStatus("ready"); }
       return true;
-    } catch { setError(true); return false; }
+    } catch (reason) {
+      setUploadError(reason instanceof Error ? reason.message : "Background upload failed.");
+      return false;
+    }
     finally { setBusy(false); }
   };
   const remove = async () => {
-    setBusy(true); setError(false);
+    setBusy(true); setError(false); setUploadError(null);
     const version = ++versions.current.image;
     try {
       await client.requestMutation("background.delete", {});
@@ -125,7 +147,7 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
     finally { setBusy(false); }
   };
   const setStyle = async (nextBlur: number, nextVeil: number) => {
-    setBusy(true); setError(false);
+    setBusy(true); setError(false); setUploadError(null);
     const version = ++versions.current.style;
     try {
       await client.requestMutation("background.style", { blur: nextBlur, veil: nextVeil });
@@ -136,7 +158,8 @@ export function BackgroundProvider({ children }: { children: ReactNode }) {
   };
   return <BackgroundContext.Provider value={{ hasBackground: image !== null, image, blur, veil, setStyle, busy,
     ready: imageStatus === "ready" && styleStatus === "ready", loadError: imageStatus === "error" || styleStatus === "error",
-    retry: refresh, error, upload, remove, clearError: () => setError(false) }}>
+    retry: refresh, error, uploadError, uploadMaxBytes, upload, remove,
+    clearError: () => { setError(false); setUploadError(null); } }}>
     {children}
   </BackgroundContext.Provider>;
 }

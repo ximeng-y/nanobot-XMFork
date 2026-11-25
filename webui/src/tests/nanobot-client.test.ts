@@ -3098,4 +3098,23 @@ describe("binary attachment transport", () => {
       expect(socket.sent.filter((frame) => JSON.parse(frame).type === "message")).toHaveLength(0);
     } finally { client.close(); vi.unstubAllGlobals(); }
   });
+
+  it("surfaces a JSON attachment rejection reason from the gateway", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({
+      error: "Attachment exceeds the 6 MiB upload limit (7,000,000 bytes)",
+    }, { status: 400 })));
+    const client = new NanobotClient({ url: "ws://test", reconnect: false,
+      socketFactory: (url) => new FakeSocket(url) as unknown as WebSocket });
+    try {
+      client.connect();
+      const socket = lastSocket(); socket.fakeOpen();
+      socket.fakeMessage({ event: "ready", chat_id: "chat", client_id: "test",
+        upload: { path: "/api/attachments", token: "cap" } });
+
+      await expect(client.sendAttachments("chat", "look", [{
+        data_url: "data:text/plain;base64,eA==", name: "note.txt",
+      }])).rejects.toThrow("Attachment exceeds the 6 MiB upload limit");
+      expect(socket.sent.filter((frame) => JSON.parse(frame).type === "message")).toHaveLength(0);
+    } finally { client.close(); vi.unstubAllGlobals(); }
+  });
 });

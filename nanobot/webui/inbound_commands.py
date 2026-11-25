@@ -566,8 +566,11 @@ class WebUICommandRouter:
         if not isinstance(raw_media, list):
             raise AttachmentUploadError("malformed")
         attachments = cast(list[Any], raw_media)
-        if len(attachments) > self._uploads.store.limits.max_count + 1:
-            raise AttachmentUploadError("Too many attachments")
+        limits = self._uploads.store.limits
+        if len(attachments) > limits.max_attachments:
+            raise AttachmentUploadError(
+                f"Too many attachments (maximum {limits.max_attachments})"
+            )
         references: list[str] = []
         local_paths: list[str] = []
         media_names: list[str | None] = []

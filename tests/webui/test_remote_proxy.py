@@ -18,6 +18,7 @@ from websockets.datastructures import Headers
 from websockets.exceptions import InvalidStatus
 from websockets.http11 import Request
 
+from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.binary_http import BinaryHTTPBridge
 from nanobot.channels.websocket.runtime import WebSocketConfig
 from nanobot.webui import remote_ssh
@@ -337,6 +338,40 @@ async def test_binary_http_upload_uses_a_live_local_capability(remote):
     assert (await remote.client.post(remote.proxy.origin + capability["path"],
                                     content=raw, headers=headers)).status_code == 401
     assert not remote.services.uploads.store._entries
+
+
+async def test_binary_http_upload_has_no_local_64_mib_proxy_cap(remote):
+    remote.state.binary_upload = True
+    issued = await bootstrap(remote)
+    raw = b"x" * (64 * 1024 * 1024 + 1)
+    remote.services.uploads.store.limits = replace(
+        remote.services.uploads.store.limits,
+        max_file_bytes=len(raw),
+        max_total_bytes=len(raw),
+    )
+    url = issued["ws_url"] + "?token=" + issued["token"]
+    async with connect(url, proxy=None, origin=remote.proxy.origin) as ws:
+        capability = json.loads(await ws.recv())["upload"]
+        headers = {
+            "Authorization": "Bearer " + capability["token"],
+            "Content-Type": "text/plain",
+            "X-Attachment-Name": "large.txt",
+        }
+        response = await remote.client.post(
+            remote.proxy.origin + capability["path"], content=raw, headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        owner = next(iter(remote.services.uploads._tokens))
+        path = remote.services.uploads.store.resolve(
+            [response.json()["reference"]], owner=owner,
+        )[0]
+        assert Path(path).stat().st_size == len(raw)
+
+        remote.services.uploads.store.limits = AttachmentIngressLimits(max_file_bytes=1)
+        rejected = await remote.client.post(
+            remote.proxy.origin + capability["path"], content=b"xx", headers=headers,
+        )
+        assert rejected.status_code == 400
 
 
 @pytest.mark.parametrize("encoded", [False, True], ids=["chunked", "compressed"])

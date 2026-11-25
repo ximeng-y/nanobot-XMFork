@@ -8,21 +8,22 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ThreadComposer } from "@/components/thread/ThreadComposer";
+import { ThreadComposer as ProductionThreadComposer } from "@/components/thread/ThreadComposer";
 import { ToastProvider } from "@/components/ui/toast";
 import { ComposerDraftStore } from "@/lib/composer-draft";
 import type { EncodeResponse } from "@/lib/imageEncode";
 import type { WebUIIngressLimits } from "@/lib/types";
 
-const encodeImage = vi.fn<(file: File) => Promise<EncodeResponse>>();
+const encodeImage = vi.fn<(file: File, maxBytes: number) => Promise<EncodeResponse>>();
 
 vi.mock("@/lib/imageEncode", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/imageEncode")>();
   return {
     ...actual,
-    encodeImage: (file: File) => encodeImage(file),
+    encodeImage: (file: File, maxBytes: number) => encodeImage(file, maxBytes),
   };
 });
 
@@ -53,11 +54,15 @@ function ingressLimits({
   maxTextBytes = 64 * 1024,
   maxFileBytes = 6 * 1024 * 1024,
   maxTotalBytes = 24 * 1024 * 1024,
+  maxVideoCount = 1,
+  maxVideoBytes = 20 * 1024 * 1024,
 }: {
   maxFrameBytes?: number;
   maxTextBytes?: number;
   maxFileBytes?: number;
   maxTotalBytes?: number;
+  maxVideoCount?: number;
+  maxVideoBytes?: number;
 } = {}): WebUIIngressLimits {
   return {
     transport: {
@@ -69,8 +74,14 @@ function ingressLimits({
       max_count: 4,
       max_file_bytes: maxFileBytes,
       max_total_bytes: maxTotalBytes,
+      max_video_count: maxVideoCount,
+      max_video_bytes: maxVideoBytes,
     },
   };
+}
+
+function ThreadComposer(props: ComponentProps<typeof ProductionThreadComposer>) {
+  return <ProductionThreadComposer ingressLimits={ingressLimits()} {...props} />;
 }
 
 beforeEach(() => {
@@ -304,6 +315,23 @@ describe("ThreadComposer — attachments", () => {
     expect(screen.queryByTestId("composer-chip")).not.toBeInTheDocument();
   });
 
+  it("passes the configured per-file budget to the image encoder", async () => {
+    const file = pngFile("budget.png", 10);
+    encodeImage.mockResolvedValueOnce(resolveReady(file));
+
+    render(<ThreadComposer onSend={vi.fn()} ingressLimits={ingressLimits({ maxFileBytes: 3 })} />);
+
+    const input = screen
+      .getByLabelText(/message input/i)
+      .closest("form")!
+      .querySelector('input[type="file"]') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+
+    expect(encodeImage).toHaveBeenCalledWith(file, 3);
+  });
+
   it("does not count binary attachments against the WebSocket frame limit", async () => {
     const first = pdfFile("first.pdf", 400 * 1024);
     const second = pdfFile("second.pdf", 400 * 1024);
@@ -353,6 +381,7 @@ describe("ThreadComposer — attachments", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Attachments are too large together",
     );
+    expect(screen.getByRole("alert")).toHaveTextContent("700.0 KiB");
     expect(screen.getAllByTestId("composer-chip")).toHaveLength(1);
   });
 
@@ -720,25 +749,33 @@ describe("local attachment paths and video ingress", () => {
 
   it("explains the size and limit of a rejected browser video without losing the draft", () => {
     const onSend = vi.fn();
-    render(<ThreadComposer onSend={onSend} />);
+    render(<ThreadComposer onSend={onSend} ingressLimits={ingressLimits({ maxVideoBytes: 10 * 1024 * 1024 })} />);
     const input = screen.getByLabelText(/message input/i);
     fireEvent.change(input, { target: { value: "keep this text" } });
     const file = new File([new Uint8Array(21 * 1024 * 1024)], "large.mp4", { type: "video/mp4" });
     fireEvent.change(input.closest("form")!.querySelector('input[type="file"]')!, { target: { files: [file] } });
     expect(screen.getByRole("alert")).toHaveTextContent("21.0 MiB");
-    expect(screen.getByRole("alert")).toHaveTextContent("20.0 MiB");
+    expect(screen.getByRole("alert")).toHaveTextContent("10.0 MiB");
     expect(input).toHaveValue("keep this text");
     expect(onSend).not.toHaveBeenCalled();
   });
 
   it("uploads picked video bytes with the existing independent video size/count allowance", async () => {
     const onSend = vi.fn();
-    render(<ThreadComposer onSend={onSend} ingressLimits={ingressLimits({ maxFileBytes: 3 })} />);
+    render(<ThreadComposer onSend={onSend} ingressLimits={ingressLimits({
+      maxFileBytes: 3,
+      maxVideoCount: 2,
+    })} />);
     const input = screen.getByLabelText(/message input/i);
     const picker = input.closest("form")!.querySelector('input[type="file"]')!;
-    fireEvent.change(picker, { target: { files: [new File(["movie"], "clip.mov", { type: "" })] } });
+    fireEvent.change(picker, { target: { files: [
+      new File(["movie"], "clip.mov", { type: "" }),
+      new File(["movie"], "clip-2.mov", { type: "" }),
+    ] } });
     await waitFor(() => expect(screen.getByRole("button", { name: /send message/i })).toBeEnabled());
     fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSend.mock.calls[0][1]).toHaveLength(2);
     expect(onSend.mock.calls[0][1][0].media).toEqual({ data_url: `data:video/quicktime;base64,${btoa("movie")}`, name: "clip.mov" });
+    expect(onSend.mock.calls[0][1][1].media).toEqual({ data_url: `data:video/quicktime;base64,${btoa("movie")}`, name: "clip-2.mov" });
   });
 });

@@ -108,6 +108,14 @@ async def test_inflight_capacity_and_cancellation(tmp_path):
     assert await upload(store, b"1234567890")
 
 
+async def test_pending_count_error_reports_configured_limit(tmp_path):
+    store = AttachmentStore(tmp_path, max_pending=1)
+    await upload(store)
+
+    with pytest.raises(AttachmentUploadError, match="maximum 1"):
+        await upload(store)
+
+
 async def test_timeout_cleans_partial_upload(tmp_path):
     store = AttachmentStore(tmp_path, upload_timeout=0.01)
 
@@ -253,17 +261,17 @@ async def test_filename_collision_preserves_another_uploads_crash_marker(tmp_pat
     store.clear()
 
 
-async def test_video_upload_limit_explains_size_before_reading_body(tmp_path):
-    from nanobot.channels.websocket.attachment_policy import MAX_VIDEO_BYTES
-
+async def test_video_upload_limit_explains_configured_size_before_reading_body(tmp_path):
     async def unread():
         pytest.fail("oversized upload body must not be consumed")
         yield b""
 
     with pytest.raises(AttachmentUploadError) as error:
-        await AttachmentStore(tmp_path).upload(
-            unread(), owner="owner", mime="video/mp4", size=MAX_VIDEO_BYTES + 1,
+        await AttachmentStore(
+            tmp_path, limits=AttachmentIngressLimits(max_video_bytes=5),
+        ).upload(
+            unread(), owner="owner", mime="video/mp4", size=6,
         )
-    assert "20 MiB" in str(error.value)
-    assert "20,971,521" in str(error.value)
+    assert "5 bytes" in str(error.value)
+    assert "6" in str(error.value)
     assert not list(tmp_path.iterdir())

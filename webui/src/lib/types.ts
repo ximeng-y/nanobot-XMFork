@@ -643,6 +643,8 @@ interface WebUIAttachmentLimits {
   max_count: number;
   max_file_bytes: number;
   max_total_bytes: number;
+  max_video_count: number;
+  max_video_bytes: number;
 }
 
 export interface WebUIIngressLimits {

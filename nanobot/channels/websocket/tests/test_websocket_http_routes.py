@@ -259,6 +259,8 @@ async def test_bootstrap_returns_token_for_localhost(
                 "max_count": 4,
                 "max_file_bytes": 6_291_456,
                 "max_total_bytes": 25_165_824,
+                "max_video_count": 1,
+                "max_video_bytes": 20_971_520,
             },
         }
         assert "max_message_bytes" not in body

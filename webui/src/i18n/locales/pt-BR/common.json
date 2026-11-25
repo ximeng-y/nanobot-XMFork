@@ -755,7 +755,7 @@
     "appearance": {
       "background": "Imagem de fundo",
       "backgroundChoose": "Escolher imagem",
-      "backgroundTooLarge": "A imagem deve ter até 6 MiB.",
+      "backgroundTooLarge": "A imagem deve ter até {{max}}.",
       "backgroundFade": "Suavizar fundo",
       "backgroundBlur": "Desfoque",
       "backgroundReplace": "Trocar imagem",
@@ -2122,12 +2122,12 @@
         "unsupported_type": "Tipo de arquivo não compatível",
         "empty_file": "Arquivos vazios não podem ser anexados",
         "too_many_attachments": "Máx. de {{max}} anexos por mensagem",
-        "too_many_videos": "Máx. de 1 vídeo por mensagem",
+        "too_many_videos": "Máx. de {{max}} vídeos por mensagem",
         "too_many_images": "Máx. de {{max}} imagens por mensagem",
         "magic_mismatch": "O arquivo não parece uma imagem real",
         "decode_failed": "Não foi possível decodificar esta imagem",
         "too_large": "O arquivo ({{size}}) excede o limite de upload de {{max}}",
-        "total_too_large": "Os anexos são grandes demais em conjunto — remova alguns ou use arquivos menores",
+        "total_too_large": "Os anexos são grandes demais em conjunto (máx. {{max}}) — remova alguns ou use arquivos menores",
         "io": "Não foi possível ler este arquivo"
       },
       "workspace": {

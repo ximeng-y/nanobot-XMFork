@@ -172,8 +172,9 @@ class AttachmentStore:
         return entries
 
     def _release_committed(self, reference: str) -> None:
-        entry = self._entries.pop(reference)
+        entry = self._entries[reference]
         (self._journal / entry.path.name).unlink(missing_ok=True)
+        self._entries.pop(reference)
         self._reserved_bytes -= entry.size
 
     def inspect(self, references: list[str], *, owner: str) -> list[StagedAttachment]:

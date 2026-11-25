@@ -64,6 +64,45 @@ async def test_ownership_invalid_and_duplicate_refs_are_atomic(tmp_path):
     assert len(store.resolve([ref], owner="owner")) == 1
 
 
+@pytest.mark.parametrize("entrypoint", ["commit", "commit_single"])
+async def test_commit_marker_failure_keeps_reference_and_capacity(
+    tmp_path, monkeypatch, entrypoint,
+):
+    store = AttachmentStore(tmp_path, max_pending=1, max_pending_bytes=6)
+    ref = await upload(store, b"123456")
+    path = Path(store.resolve([ref], owner="owner")[0])
+    marker = tmp_path / ".pending-attachments" / path.name
+    original_unlink = Path.unlink
+    failed = False
+
+    def fail_marker_once(target, *args, **kwargs):
+        nonlocal failed
+        if target == marker and not failed:
+            failed = True
+            raise PermissionError("marker is busy")
+        return original_unlink(target, *args, **kwargs)
+
+    def commit_reference():
+        if entrypoint == "commit":
+            return store.commit([ref], owner="owner")
+        return store.commit_single(ref, owner="owner")
+
+    monkeypatch.setattr(Path, "unlink", fail_marker_once)
+    with pytest.raises(PermissionError, match="marker is busy"):
+        commit_reference()
+
+    assert failed
+    assert path.exists()
+    assert marker.exists()
+    assert store.resolve([ref], owner="owner") == [str(path)]
+
+    commit_reference()
+    assert not marker.exists()
+    with pytest.raises(AttachmentUploadError):
+        store.resolve([ref], owner="owner")
+    assert await upload(store, b"123456")
+
+
 @pytest.mark.parametrize("size,raw", [(4, b"12345"), (6, b"12345")])
 async def test_body_length_failure_cleans_file_and_capacity(tmp_path, size, raw):
     store = AttachmentStore(tmp_path, max_pending=1, max_pending_bytes=6)

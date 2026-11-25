@@ -20,6 +20,7 @@ const SETTINGS_SECTION_KEYS: SettingsSectionKey[] = [
   "about",
   "appearance",
   "notifications",
+  "attachments",
   "models",
   "image",
   "voice",

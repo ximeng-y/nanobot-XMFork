@@ -29,6 +29,7 @@ import { providerFormFromRow } from "@/components/settings/models/providerForm";
 import { AboutSettings, AppearanceSettings, OverviewSettings } from "@/components/settings/overview/OverviewSettings";
 import { TokenUsageOverview } from "@/components/settings/TokenUsageOverview";
 import { NotificationSettings } from "@/components/settings/notifications/NotificationSettings";
+import { AttachmentsSettings } from "@/components/settings/AttachmentsSettings";
 import { SettingsSidebar, standaloneSectionTitle } from "@/components/settings/SettingsSidebar";
 import {
   NanobotFeatureInstallDialog,
@@ -497,6 +498,8 @@ export function SettingsPage({
       case "appearance":
         return <AppearanceSettings themePreference={themePreference} onChangeTheme={onChangeTheme}
           localPrefs={localPrefs} onChangeLocalPrefs={setLocalPrefs} />;
+      case "attachments":
+        return <AttachmentsSettings token={token} transport={client} />;
       case "channels":
         return (
           <ChannelsSettings
@@ -626,7 +629,7 @@ export function SettingsPage({
         return renderSettingsSection(section, embedded);
     }
   };
-  // Appearance reads only browser-local preferences, not the gateway settings snapshot.
+  // Appearance and attachments load through their own surfaces, not the shared settings snapshot.
   const appsSection = isAppsSection(activeSection);
   const catalogSearch = activeSection === "skills" ? skillsSearch.search
     : activeSection === "channels" ? {
@@ -639,7 +642,7 @@ export function SettingsPage({
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => systemState.setAppsQuery(event.target.value),
       placeholder: t("settings.apps.searchPlaceholder"),
     } : null;
-  const localSection = activeSection === "appearance";
+  const localSection = activeSection === "appearance" || activeSection === "attachments";
   const sectionReady = localSection || settings !== null || activeSection === "skills" || activeSection === "apps"
     || activeSection === "channels" || activeSection === "automations";
 

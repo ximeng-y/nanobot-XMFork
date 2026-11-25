@@ -76,6 +76,36 @@ function normalizeProjection(messages: UIMessage[]): Array<Record<string, unknow
 }
 
 describe("canonical thread event projection", () => {
+  it("keeps deleted attachment state without projecting it as a legacy image", () => {
+    const messages = projectThreadEvents([{
+      event: "user_message",
+      chat_id: "chat",
+      turn_id: "turn",
+      turn_seq: 1,
+      text: "Deleted attachment",
+      starts_turn: true,
+      projection_id: "deleted-image",
+      media_urls: [{
+        kind: "image",
+        name: "deleted.png",
+        url: "",
+        managed_id: "att-1",
+        deleted: true,
+      }],
+    }]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].content).toBe("Deleted attachment");
+    expect(messages[0].images).toBeUndefined();
+    expect(messages[0].media).toEqual([{
+      kind: "image",
+      name: "deleted.png",
+      url: "",
+      managed_id: "att-1",
+      deleted: true,
+    }]);
+  });
+
   it("routes late snapshots by stream without moving same-text answers or stealing the active cursor", () => {
     let state = createThreadProjectionState();
     const index = new ThreadProjectionIndex();

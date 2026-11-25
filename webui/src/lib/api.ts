@@ -16,6 +16,10 @@ import type {
   FilePreviewPayload,
   FileReferenceMetadata,
   ImageGenerationSettingsUpdate,
+  ManagedAttachmentDeletePreview,
+  ManagedAttachmentDeleteResult,
+  ManagedAttachmentsPayload,
+  ManagedAttachmentSettings,
   McpPresetsPayload,
   McpOAuthFlowPayload,
   MarketplaceProvider,
@@ -258,10 +262,13 @@ function isRecordArray(value: unknown): value is Array<Record<string, unknown>> 
 }
 
 function isProjectionMedia(value: unknown): boolean {
-  return isRecord(value)
-    && typeof value.url === "string"
+  if (!isRecord(value)) return false;
+  const deleted = value.deleted === true;
+  return (typeof value.url === "string" || (deleted && value.url === undefined))
     && (value.name === undefined || typeof value.name === "string")
-    && (value.kind === undefined || ["image", "video", "file"].includes(String(value.kind)));
+    && (value.kind === undefined || ["image", "video", "file"].includes(String(value.kind)))
+    && (value.managed_id === undefined || typeof value.managed_id === "string")
+    && (value.deleted === undefined || typeof value.deleted === "boolean");
 }
 
 function hasStringField(value: Record<string, unknown>, field: string): boolean {
@@ -880,6 +887,55 @@ export async function deleteSession(
     {
       key,
       ...(options?.deleteAutomations ? { delete_automations: true } : {}),
+    },
+  );
+}
+
+export function fetchManagedAttachments(
+  token: string,
+  base: string = "",
+): Promise<ManagedAttachmentsPayload> {
+  return request<ManagedAttachmentsPayload>(
+    `${base}/api/attachments/managed`,
+    token,
+    undefined,
+    API_READ_TIMEOUT_MS,
+  );
+}
+
+export function previewManagedAttachmentDeletion(
+  transport: WebUIMutationTransport,
+  ids: string[],
+): Promise<ManagedAttachmentDeletePreview> {
+  return mutation<ManagedAttachmentDeletePreview>(
+    transport,
+    "attachments.preview_delete",
+    { ids },
+  );
+}
+
+export function deleteManagedAttachments(
+  transport: WebUIMutationTransport,
+  ids: string[],
+): Promise<ManagedAttachmentDeleteResult> {
+  return mutation<ManagedAttachmentDeleteResult>(
+    transport,
+    "attachments.delete",
+    { ids },
+  );
+}
+
+export function updateManagedAttachmentSettings(
+  transport: WebUIMutationTransport,
+  settings: ManagedAttachmentSettings,
+): Promise<ManagedAttachmentsPayload> {
+  return mutation<ManagedAttachmentsPayload>(
+    transport,
+    "attachments.settings.update",
+    {
+      max_bytes: settings.max_bytes,
+      auto_cleanup: settings.auto_cleanup,
+      orphan_days: settings.orphan_days,
     },
   );
 }

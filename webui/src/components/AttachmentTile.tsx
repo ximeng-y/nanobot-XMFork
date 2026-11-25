@@ -22,11 +22,12 @@ interface AttachmentTileProps {
 
 export function AttachmentTile({ attachment, className, inline = false, variant = "default", pending = false, edgeState = "solid", onSealEnd }: AttachmentTileProps) {
   const { t } = useTranslation();
-  const videoUrl = attachment.url;
+  const deleted = attachment.deleted === true;
+  const videoUrl = deleted ? undefined : attachment.url;
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   const failed = !!videoUrl && failedUrl === videoUrl;
   const [imageOpen, setImageOpen] = useState(false);
-  const hasUrl = typeof attachment.url === "string" && attachment.url.length > 0;
+  const hasUrl = !deleted && typeof attachment.url === "string" && attachment.url.length > 0;
   const label = attachmentLabel(attachment, t);
   useRegisterInlineImage(inline && attachment.kind === "image" && hasUrl && !failed ? attachment.url : undefined);
 
@@ -70,7 +71,9 @@ export function AttachmentTile({ attachment, className, inline = false, variant 
   const filePath = attachment.name || attachment.url?.split(/[?#]/, 1)[0] || "";
   const name = attachment.name || label;
   const available = hasUrl && !failed;
-  const status = available ? undefined : pending ? t("message.delivery.sending") : t("message.attachmentUnavailable");
+  const status = deleted
+    ? t("message.attachmentDeleted", { defaultValue: "Deleted" })
+    : available ? undefined : pending ? t("message.delivery.sending") : t("message.attachmentUnavailable");
   const download = available ? <a href={attachment.url} download={name} title={name}
     aria-label={t("message.downloadAttachment", { name })}
     className={cn(attachmentCardActionClassName, "text-muted-foreground hover:text-foreground")}>
@@ -82,7 +85,7 @@ export function AttachmentTile({ attachment, className, inline = false, variant 
       <AttachmentTypeFace name={filePath} kind={attachment.kind} />
     </AttachmentCard>
     {status ? <span className="break-words text-center text-[11px] leading-4 text-muted-foreground">{status}</span> : null}
-    {attachment.kind === "video" && failed && !pending ? (
+    {!deleted && attachment.kind === "video" && failed && !pending ? (
       <button type="button" onClick={() => setFailedUrl(undefined)}
         className="min-h-11 rounded-sm px-1 text-xs text-foreground underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2">
         {t("common.retry")}

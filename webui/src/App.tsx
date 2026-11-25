@@ -1701,6 +1701,7 @@ function Shell({
     const reveal = () => setDeletingKeys((current) => new Set([...current].filter((key) => !batchKeys.has(key))));
     const commit = async () => {
       let failed = 0;
+      let attachmentFailures = 0;
       const blockedItems: SidebarDeleteItem[] = [];
       const blockedJobsByKey = new Map<string, SessionAutomationJob[]>();
       try {
@@ -1713,6 +1714,7 @@ function Shell({
             if (result.deleted) {
               filePreviewStore.delete(item.key);
               draftStore.delete(item.key);
+              attachmentFailures += result.attachments?.failed.length ?? 0;
             } else if (result.blocked_by_automations && result.automations?.length) {
               blockedItems.push(item);
               blockedJobsByKey.set(item.key, result.automations);
@@ -1734,10 +1736,16 @@ function Shell({
         message: t(failed === 1 ? "toast.deleteFailedSingle" : "toast.deleteFailed", { count: failed }),
         tone: "error",
       });
+      if (attachmentFailures) showToast({
+        message: t("toast.attachmentCleanupFailed", { count: attachmentFailures }),
+        tone: "error",
+      });
     };
     return {
       message: t(items.length === 1 ? "toast.pendingDeleteSingle" : "toast.pendingDelete", { count: items.length }),
-      detail: items.length === 1 ? items[0].label : undefined,
+      detail: items.length === 1
+        ? `${items[0].label} · ${t("toast.deleteAttachmentsHint")}`
+        : t("toast.deleteAttachmentsHint"),
       tone: "pending",
       action: { label: t("toast.undo"), run: reveal },
       onExpire: () => { void commit(); },

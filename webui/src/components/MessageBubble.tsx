@@ -457,6 +457,7 @@ export function MessageBubble({
     const media = message.media ?? [];
     const hasImages = images.length > 0;
     const hasMedia = media.length > 0;
+    const hasDeletedMedia = media.some((item) => item.deleted === true);
     const parsedMessage = parseQuotedUserMessage(message.content);
     const userContent = parsedMessage.content;
     const hasText = userContent.trim().length > 0;
@@ -466,11 +467,13 @@ export function MessageBubble({
     const showProcessingStatus = !temporary && processingStatus === "pending";
     const mediaEdgeState: PendingEdgeState = !hasText ? edgeState : "solid";
     const mediaSealEnd = !hasText ? completeSeal : undefined;
-    const userMedia = hasImages
+    const userMedia = hasImages && !hasDeletedMedia
       ? <ImageGallery images={images} align="right" size="compact" edgeState={mediaEdgeState} onSealEnd={mediaSealEnd} />
       : hasMedia
         ? <MessageMedia media={media} align="right" pending={message.deliveryStatus === "sending"} edgeState={mediaEdgeState} onSealEnd={mediaSealEnd} />
-        : null;
+        : hasImages
+          ? <ImageGallery images={images} align="right" size="compact" edgeState={mediaEdgeState} onSealEnd={mediaSealEnd} />
+          : null;
     const quotedContext = parsedMessage.quotedContext;
     const slashCommand = matchingSlashCommand(userContent, slashCommands);
     const bangPrefix = /^(\s*)!/.exec(userContent);
@@ -906,10 +909,12 @@ function MessageMedia({
   const files: UIMediaAttachment[] = [];
   for (const item of media) {
     const normalized = toMediaAttachment(item);
-    if (normalized.kind === "image") {
+    if (normalized.kind === "image" && !normalized.deleted && normalized.url) {
       if (normalized.url && (inlineImages.has(normalized.url) || seen.has(normalized.url))) continue;
-      if (normalized.url) seen.add(normalized.url);
+      seen.add(normalized.url);
       images.push({ url: normalized.url, name: normalized.name });
+    } else if (normalized.kind === "image") {
+      files.push(normalized);
     } else if (normalized.kind === "video") {
       videos.push(normalized);
     } else {

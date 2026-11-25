@@ -12,6 +12,7 @@ import {
   deleteSkill,
   deleteModelConfiguration,
   deleteSession,
+  deleteManagedAttachments,
   fetchFilePreview,
   fetchFilePreviewAvailability,
   fetchAutomations,
@@ -22,6 +23,7 @@ import {
   fetchMcpOAuthStatus,
   fetchMcpPresets,
   fetchMarketplaceSkillTrends,
+  fetchManagedAttachments,
   fetchNanobotFeatures,
   fetchProviderModels,
   fetchPromptIndex,
@@ -54,12 +56,14 @@ import {
   startMcpOAuth,
   cancelChannelConnect,
   pollChannelConnect,
+  previewManagedAttachmentDeletion,
   startChannelConnect,
   updateAutomation,
   updateImageGenerationSettings,
   updateModelCallOrder,
   updateModelConfiguration,
   updateMcpServerTools,
+  updateManagedAttachmentSettings,
   updateNetworkSafetySettings,
   updateProviderSettings,
   updateSkillEnabled,
@@ -212,6 +216,41 @@ describe("webui API helpers", () => {
     await expect(fetchWebuiThread("tok", "websocket:chat-1")).rejects.toThrow(
       "Invalid WebUI thread projection event: file_edit",
     );
+  });
+
+  it("accepts deleted managed media without a URL while validating its metadata", async () => {
+    const deletedMedia = {
+      kind: "image",
+      name: "removed.png",
+      managed_id: "att-1",
+      deleted: true,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      schemaVersion: 3,
+      projection: "events",
+      events: [{
+        event: "user_message",
+        chat_id: "chat-1",
+        text: "Keep this text",
+        starts_turn: true,
+        media_urls: [deletedMedia],
+      }],
+    })));
+
+    await expect(fetchWebuiThread("tok", "websocket:chat-1")).resolves.toMatchObject({
+      events: [{ media_urls: [deletedMedia] }],
+    });
+
+    expect(() => parseWebuiThreadPayload({
+      schemaVersion: 3,
+      projection: "events",
+      events: [{
+        event: "message",
+        chat_id: "chat-1",
+        text: "Reply",
+        media_urls: [{ ...deletedMedia, managed_id: 1 }],
+      }],
+    })).toThrow("Invalid WebUI thread projection event: message");
   });
 
   it.each([
@@ -707,6 +746,48 @@ describe("webui API helpers", () => {
     expect(requestMutation).toHaveBeenCalledWith(
       "session.delete",
       { key: "websocket:chat-1", delete_automations: true },
+      20_000,
+    );
+  });
+
+  it("uses the fixed attachment-management endpoints and WS actions", async () => {
+    const payload = {
+      items: [],
+      usage: { managed_bytes: 0, pending_bytes: 0, protected_bytes: 0 },
+      settings: { max_bytes: null, auto_cleanup: false, orphan_days: 30 },
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(payload), {
+      headers: { "content-type": "application/json" },
+    }));
+
+    await expect(fetchManagedAttachments("tok")).resolves.toEqual(payload);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/attachments/managed",
+      expect.objectContaining({ headers: { Authorization: "Bearer tok" } }),
+    );
+
+    await previewManagedAttachmentDeletion(mutationTransport, ["att-1"]);
+    expect(requestMutation).toHaveBeenLastCalledWith(
+      "attachments.preview_delete",
+      { ids: ["att-1"] },
+      20_000,
+    );
+
+    await deleteManagedAttachments(mutationTransport, ["att-1"]);
+    expect(requestMutation).toHaveBeenLastCalledWith(
+      "attachments.delete",
+      { ids: ["att-1"] },
+      20_000,
+    );
+
+    await updateManagedAttachmentSettings(mutationTransport, {
+      max_bytes: 1_073_741_824,
+      auto_cleanup: true,
+      orphan_days: 14,
+    });
+    expect(requestMutation).toHaveBeenLastCalledWith(
+      "attachments.settings.update",
+      { max_bytes: 1_073_741_824, auto_cleanup: true, orphan_days: 14 },
       20_000,
     );
   });

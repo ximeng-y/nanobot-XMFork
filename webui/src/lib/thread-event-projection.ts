@@ -946,7 +946,7 @@ function reduceThreadEvent(
           state.messages = replaceMessageAt(state.messages, existing, {
             ...message,
             media,
-            images: media.every((item) => item.kind === "image")
+            images: media.every((item) => item.kind === "image" && !item.deleted)
               ? media.map(({ url, name }) => ({ url, name })) : undefined,
           });
           options.effects?.bodyWrites.add(message.id);
@@ -985,7 +985,7 @@ function reduceThreadEvent(
         ? { sessionMessage: event.provenance.session_message }
         : {}),
     };
-    if (media?.length && media.every((item) => item.kind === "image")) {
+    if (media?.length && media.every((item) => item.kind === "image" && !item.deleted)) {
       row.images = media.map(({ url, name }) => ({ url, name }));
     }
     state.messages = [...state.messages, row];

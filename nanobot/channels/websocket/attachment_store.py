@@ -15,13 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nanobot.channels.websocket.attachment_policy import (
-    AttachmentIngressLimits,
     DEFAULT_MAX_PENDING,
     DEFAULT_MAX_PENDING_BYTES,
     DOCUMENT_MIME_ALLOWED,
     UPLOAD_IDLE_TIMEOUT_SECONDS,
     UPLOAD_MIME_ALLOWED,
     UPLOAD_TIMEOUT_SECONDS,
+    AttachmentIngressLimits,
     validate_upload_batch,
     validate_upload_size,
 )

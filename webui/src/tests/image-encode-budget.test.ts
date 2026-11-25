@@ -57,25 +57,14 @@ describe("image encoding budget", () => {
 
   it("forwards the requested budget through the worker wrapper", async () => {
     const listeners = new Map<string, (event: { data: unknown }) => void>();
-    let worker: {
-      posted: { id: string; maxBytes: number } | null;
-      addEventListener: (type: string, listener: (event: { data: unknown }) => void) => void;
-      postMessage: (message: { id: string; maxBytes: number }) => void;
-      terminate: () => void;
-    };
+    let posted: { id: string; maxBytes: number } | null = null;
     vi.stubGlobal("Worker", class {
-      posted: { id: string; maxBytes: number } | null = null;
-
-      constructor() {
-        worker = this;
-      }
-
       addEventListener(type: string, listener: (event: { data: unknown }) => void) {
         listeners.set(type, listener);
       }
 
       postMessage(message: { id: string; maxBytes: number }) {
-        this.posted = message;
+        posted = message;
       }
 
       terminate() {}
@@ -85,9 +74,9 @@ describe("image encoding budget", () => {
 
     const pending = encodeImage(file, 12_345);
 
-    expect(worker!.posted).toMatchObject({ id: expect.any(String), maxBytes: 12_345 });
+    expect(posted).toMatchObject({ id: expect.any(String), maxBytes: 12_345 });
     listeners.get("message")!({
-      data: { id: worker!.posted!.id, ok: false, reason: "decode_failed" },
+      data: { id: posted!.id, ok: false, reason: "decode_failed" },
     });
     await expect(pending).resolves.toMatchObject({ ok: false, reason: "decode_failed" });
   });

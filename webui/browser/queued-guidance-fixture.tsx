@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { ThreadComposer } from "@/components/thread/ThreadComposer";
 import type { SendAttachment, SendOptions } from "@/hooks/useNanobotStream";
+import { ingressLimitsFixture } from "./ingress-limits-fixture";
 
 export function QueuedGuidanceFixture() {
   const [away, setAway] = useState(false);
@@ -17,6 +18,7 @@ export function QueuedGuidanceFixture() {
       isStreaming={!completed}
       activeTurnId={completed ? null : "turn-a"}
       completedTurnIds={completed ? ["turn-a"] : []}
+      ingressLimits={ingressLimitsFixture}
       onStop={() => setCompleted(true)}
       onSend={(text, images, options) => {
         setSent((current) => [...current, { text, images, options }]);

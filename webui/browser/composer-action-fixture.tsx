@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ThreadComposer } from "@/components/thread/ThreadComposer";
 import { ToastProvider } from "@/components/ui/toast";
+import { ingressLimitsFixture } from "./ingress-limits-fixture";
 
 export function installMissingMicrophonePreview() {
   Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
@@ -16,6 +17,7 @@ export function ComposerActionFixture({ parameters }: { parameters: URLSearchPar
       variant={parameters.get("composerVariant") === "thread" ? "thread" : "hero"}
       placeholder={parameters.has("opening") ? "Opening a new topic…" : undefined}
       modelLabel="Preview"
+      ingressLimits={ingressLimitsFixture}
       isStreaming={running}
       onTranscribeAudio={async () => "Voice draft"}
       onSend={() => { setStopRequested(false); setRunning(true); }}

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger as default_logger
 
-from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.attachment_http import AttachmentHTTP
+from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.attachment_store import AttachmentStore
 from nanobot.config.loader import get_config_path
 from nanobot.config.paths import get_media_dir

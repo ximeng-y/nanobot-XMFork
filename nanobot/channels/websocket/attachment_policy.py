@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-
 DEFAULT_MAX_COUNT = 4
 DEFAULT_MAX_FILE_BYTES = 6 * 1024 * 1024
 DEFAULT_MAX_TOTAL_BYTES = 24 * 1024 * 1024

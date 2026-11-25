@@ -1252,9 +1252,9 @@ class WebUICommandRouter:
                                         return WebUIRequestResult(status=400, message="Invalid attachment reference")
                                     owner = self._uploads.owner(connection)
                                     try:
-                                        entry = self._uploads.store.inspect([reference], owner=owner)[0]
+                                        entry = self._uploads.store.inspect_single(reference, owner=owner)
                                         # Claim before yielding so disconnect cleanup cannot unlink the worker's source.
-                                        self._uploads.store.commit([reference], owner=owner)
+                                        self._uploads.store.commit_single(reference, owner=owner)
 
                                         def persist_staged_background() -> None:
                                             try:

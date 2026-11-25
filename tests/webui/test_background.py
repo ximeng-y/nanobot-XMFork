@@ -11,6 +11,7 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request
 
 from nanobot.bus.queue import MessageBus
+from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.attachment_store import AttachmentStore
 from nanobot.webui.background import save_background
 from nanobot.webui.inbound_commands import WebUICommandRouter
@@ -55,6 +56,40 @@ async def test_background_auth_and_staged_upload(tmp_path):
     assert (await router.execute_webui_request("alice", "background.update", {"reference": reference})).status == 400
     assert (await router.execute_webui_request("alice", "background.delete", {})).result == {"ok": True}
     assert (await handler._dispatch_resolved(None, request, path)).status_code == 404
+
+
+async def test_background_upload_does_not_consume_message_total_limit(tmp_path):
+    body_size = 1536 * 1024
+    body = image_bytes("PNG")
+    body += b"\0" * (body_size - len(body))
+    store = AttachmentStore(
+        tmp_path / "staging",
+        limits=AttachmentIngressLimits(
+            max_file_bytes=2 * 1024 * 1024,
+            max_total_bytes=1024 * 1024,
+        ),
+        max_pending=1,
+        max_pending_bytes=body_size,
+    )
+
+    async def chunks():
+        yield body
+
+    reference = await store.upload(chunks(), owner="alice", mime="image/png", size=len(body))
+    router = WebUICommandRouter.__new__(WebUICommandRouter)
+    router._background_lock = asyncio.Lock()
+    router._http_router = SimpleNamespace(bus=MessageBus(), settings=SimpleNamespace(
+        config=SimpleNamespace(path=tmp_path / "config.json")))
+    router._uploads = SimpleNamespace(store=store, owner=lambda connection: connection)
+    router.request_locks = {}
+
+    result = await router.execute_webui_request("alice", "background.update", {"reference": reference})
+
+    assert result.result == {"ok": True}
+    assert (tmp_path / "webui" / "background.png").read_bytes().startswith(b"\x89PNG")
+    replacement = await store.upload(chunks(), owner="alice", mime="image/png", size=len(body))
+    assert replacement
+    store.clear()
 
 
 def test_reject_unsafe_images_without_replacing_existing(tmp_path):

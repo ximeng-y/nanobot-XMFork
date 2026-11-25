@@ -1,14 +1,40 @@
 import { act, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ThreadComposer } from "@/components/thread/ThreadComposer";
+import { ThreadComposer as ProductionThreadComposer } from "@/components/thread/ThreadComposer";
 import { ComposerUsagePopover } from "@/components/thread/ComposerUsagePopover";
 import { ToastProvider } from "@/components/ui/toast";
 import { ComposerDraftStore } from "@/lib/composer-draft";
 import { encodeImage } from "@/lib/imageEncode";
 import { SESSION_DRAG_TYPE } from "@/lib/session-drag";
-import type { ChatSummary, CliAppInfo, McpPresetInfo, SlashCommand, WorkspaceScopePayload } from "@/lib/types";
+import type {
+  ChatSummary,
+  CliAppInfo,
+  McpPresetInfo,
+  SlashCommand,
+  WebUIIngressLimits,
+  WorkspaceScopePayload,
+} from "@/lib/types";
+
+function ingressLimits(): WebUIIngressLimits {
+  return {
+    transport: { max_frame_bytes: 36 * 1024 * 1024, envelope_reserve_bytes: 64 * 1024 },
+    message: { max_text_bytes: 64 * 1024 },
+    attachments: {
+      max_count: 4,
+      max_file_bytes: 6 * 1024 * 1024,
+      max_total_bytes: 24 * 1024 * 1024,
+      max_video_count: 1,
+      max_video_bytes: 20 * 1024 * 1024,
+    },
+  };
+}
+
+function ThreadComposer(props: ComponentProps<typeof ProductionThreadComposer>) {
+  return <ProductionThreadComposer ingressLimits={ingressLimits()} {...props} />;
+}
 
 function workspacePickerProps(scope: WorkspaceScopePayload) {
   const resolvePath = (path: string) => path.startsWith("~/") ? `/Users/test/${path.slice(2)}` : path;

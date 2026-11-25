@@ -15,13 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nanobot.channels.websocket.attachment_policy import (
-    DOCUMENT_MIME_ALLOWED,
+    AttachmentIngressLimits,
     DEFAULT_MAX_PENDING,
     DEFAULT_MAX_PENDING_BYTES,
+    DOCUMENT_MIME_ALLOWED,
     UPLOAD_IDLE_TIMEOUT_SECONDS,
     UPLOAD_MIME_ALLOWED,
     UPLOAD_TIMEOUT_SECONDS,
-    AttachmentIngressLimits,
     validate_upload_batch,
     validate_upload_size,
 )
@@ -157,8 +157,27 @@ class AttachmentStore:
                     if marker_created:
                         (self._journal / path.name).unlink(missing_ok=True)
 
+    def _inspect_owned(
+        self,
+        references: list[str],
+        *,
+        owner: str,
+    ) -> list[StagedAttachment]:
+        entries: list[StagedAttachment] = []
+        for reference in references:
+            entry = self._entries.get(reference)
+            if entry is None or not owner or entry.owner != owner:
+                raise AttachmentUploadError("Invalid attachment reference")
+            entries.append(entry)
+        return entries
+
+    def _release_committed(self, reference: str) -> None:
+        entry = self._entries.pop(reference)
+        (self._journal / entry.path.name).unlink(missing_ok=True)
+        self._reserved_bytes -= entry.size
+
     def inspect(self, references: list[str], *, owner: str) -> list[StagedAttachment]:
-        """Validate a complete batch without consuming it, allowing send retries."""
+        """Validate a complete message batch without consuming it."""
         self.prune()
         if len(references) > self.limits.max_attachments:
             raise AttachmentUploadError(
@@ -166,17 +185,24 @@ class AttachmentStore:
             )
         if len(set(references)) != len(references):
             raise AttachmentUploadError("Duplicate attachment reference")
-        entries: list[StagedAttachment] = []
-        for reference in references:
-            entry = self._entries.get(reference)
-            if entry is None or not owner or entry.owner != owner:
-                raise AttachmentUploadError("Invalid attachment reference")
-            entries.append(entry)
+        entries = self._inspect_owned(references, owner=owner)
         try:
             validate_upload_batch([(e.mime, e.size) for e in entries], limits=self.limits)
         except ValueError as exc:
             raise AttachmentUploadError(str(exc)) from exc
         return entries
+
+    def inspect_single(self, reference: str, *, owner: str) -> StagedAttachment:
+        """Validate one non-message file without applying batch total limits."""
+        self.prune()
+        entry = self._inspect_owned([reference], owner=owner)[0]
+        try:
+            if entry.mime not in UPLOAD_MIME_ALLOWED:
+                raise ValueError("Unsupported attachment MIME")
+            validate_upload_size(entry.mime, entry.size, limits=self.limits)
+        except ValueError as exc:
+            raise AttachmentUploadError(str(exc)) from exc
+        return entry
 
     def resolve(self, references: list[str], *, owner: str) -> list[str]:
         return [str(entry.path) for entry in self.inspect(references, owner=owner)]
@@ -189,10 +215,14 @@ class AttachmentStore:
         """
         paths = self.resolve(references, owner=owner)
         for reference in references:
-            entry = self._entries[reference]
-            (self._journal / entry.path.name).unlink(missing_ok=True)
-            self._reserved_bytes -= self._entries.pop(reference).size
+            self._release_committed(reference)
         return paths
+
+    def commit_single(self, reference: str, *, owner: str) -> str:
+        """Transfer one non-message file without applying message batch limits."""
+        entry = self.inspect_single(reference, owner=owner)
+        self._release_committed(reference)
+        return str(entry.path)
 
     def discard_owner(self, owner: str) -> None:
         self.discard([ref for ref, entry in self._entries.items() if entry.owner == owner], owner=owner)

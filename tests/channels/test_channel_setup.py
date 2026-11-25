@@ -58,6 +58,13 @@ INTERNAL_CHANNEL_FIELDS = {
         "tokenTtlS",
         "trustedProxyAuth",
         "unixSocketPath",
+        "uploads.maxCount",
+        "uploads.maxFileBytes",
+        "uploads.maxPending",
+        "uploads.maxPendingBytes",
+        "uploads.maxTotalBytes",
+        "uploads.maxVideoBytes",
+        "uploads.maxVideoCount",
         "websocketRequiresToken",
     },
 }

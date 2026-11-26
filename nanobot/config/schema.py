@@ -153,6 +153,45 @@ class InlineFallbackConfig(RequestOverrides):
 FallbackCandidate = str | InlineFallbackConfig
 
 
+_REASONING_EFFORT_MAX_LENGTH = 256
+
+
+def normalize_allowed_reasoning_efforts(value: object) -> list[str] | None:
+    """Normalize an explicit reasoning-effort allowlist without changing order."""
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("allowed_reasoning_efforts must be a JSON array or null")
+
+    efforts: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("allowed_reasoning_efforts entries must be strings")
+        effort = item.strip()
+        if not effort:
+            raise ValueError("allowed_reasoning_efforts entries must not be empty")
+        if len(effort) > _REASONING_EFFORT_MAX_LENGTH or any(
+            ord(char) < 32 or ord(char) == 127 for char in effort
+        ):
+            raise ValueError("allowed_reasoning_efforts entries must be valid effort names")
+        if effort not in efforts:
+            efforts.append(effort)
+    return efforts
+
+
+def validate_reasoning_effort_choices(
+    reasoning_effort: str | None,
+    allowed_reasoning_efforts: list[str] | None,
+) -> None:
+    """Require a concrete default to be one of the explicitly allowed efforts."""
+    if (
+        allowed_reasoning_efforts is not None
+        and reasoning_effort
+        and reasoning_effort not in allowed_reasoning_efforts
+    ):
+        raise ValueError("reasoning_effort must be one of allowed_reasoning_efforts")
+
+
 class ModelPresetConfig(RequestOverrides):
     """A named set of model + generation parameters for quick switching."""
 
@@ -163,8 +202,22 @@ class ModelPresetConfig(RequestOverrides):
     context_window_tokens: int = 200_000
     temperature: float = 0.1
     reasoning_effort: str | None = None
+    allowed_reasoning_efforts: list[str] | None = None
     codex_fast_mode: StrictBool | Literal["ultrafast"] | None = None
     api: ModelAPIConfig | None = None
+
+    @field_validator("allowed_reasoning_efforts", mode="before")
+    @classmethod
+    def _normalize_allowed_reasoning_efforts(cls, value: object) -> list[str] | None:
+        return normalize_allowed_reasoning_efforts(value)
+
+    @model_validator(mode="after")
+    def _validate_reasoning_effort_choices(self) -> "ModelPresetConfig":
+        validate_reasoning_effort_choices(
+            self.reasoning_effort,
+            self.allowed_reasoning_efforts,
+        )
+        return self
 
     def to_generation_settings(self) -> GenerationSettings:
         return GenerationSettings(

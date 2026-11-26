@@ -759,6 +759,7 @@ describe("webui API helpers", () => {
       contextWindowTokens: 128000,
       temperature: 0.4,
       reasoningEffort: "high",
+      allowedReasoningEfforts: ["high", "xhigh", "max"],
     }, true);
 
     expect(requestMutation).toHaveBeenCalledWith(
@@ -773,6 +774,7 @@ describe("webui API helpers", () => {
         context_window_tokens: 128000,
         temperature: 0.4,
         reasoning_effort: "high",
+        allowed_reasoning_efforts: ["high", "xhigh", "max"],
       },
       20_000,
     );
@@ -788,6 +790,7 @@ describe("webui API helpers", () => {
       contextWindowTokens: 65536,
       temperature: 0,
       reasoningEffort: null,
+      allowedReasoningEfforts: null,
     }, true);
 
     expect(requestMutation).toHaveBeenCalledWith(
@@ -802,6 +805,7 @@ describe("webui API helpers", () => {
         context_window_tokens: 65536,
         temperature: 0,
         reasoning_effort: "",
+        allowed_reasoning_efforts: null,
       },
       20_000,
     );

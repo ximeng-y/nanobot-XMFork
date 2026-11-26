@@ -583,7 +583,7 @@ class AgentLoop:
             if input_metadata is not None and INBOUND_META_MODEL_OPTIONS in input_metadata
             else selection.overrides
         )
-        return runtime.with_model_options(options)
+        return self.runtime_resolver.apply_model_options(runtime, options)
 
     async def set_session_model_preset(
         self,

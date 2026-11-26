@@ -2,7 +2,7 @@ import { ProviderIcon } from "@/components/settings/shared/ProviderIcon";
 import { ModelAPIControl } from "@/components/settings/models/ModelAPIControl";
 import { useAutomaticModelAPI } from "@/components/settings/models/useAutomaticModelAPI";
 import { useModelPresetDrag } from "@/components/settings/models/useModelPresetDrag";
-import { ReasoningEffortPicker } from "@/components/settings/models/ReasoningEffortPicker";
+import { ReasoningEffortSettingsControl } from "@/components/settings/models/ReasoningEffortSettingsControl";
 import { RemoveActionButton } from "@/components/settings/shared/RemoveActionButton";
 import { CodexSpeedControl } from "@/components/ui/codex-speed-control";
 import { ToggleButton } from "@/components/ui/toggle-button";
@@ -60,6 +60,7 @@ export interface AgentSettingsDraft {
   contextWindowTokens: number;
   temperature: number;
   reasoningEffort: string;
+  allowedReasoningEfforts: string[] | null;
   codexFastMode: CodexFastMode | null;
   supportsImages: boolean;
   api: ModelAPIConfig | null;
@@ -106,6 +107,7 @@ export const DEFAULT_AGENT_SETTINGS_DRAFT: AgentSettingsDraft = {
   contextWindowTokens: 200_000,
   temperature: 0.1,
   reasoningEffort: "",
+  allowedReasoningEfforts: null,
   codexFastMode: null,
   supportsImages: true,
   api: null,
@@ -135,6 +137,7 @@ export function agentDraftFromPayload(
     ),
     temperature: activePreset?.temperature ?? payload.agent.temperature,
     reasoningEffort: activePreset?.reasoning_effort ?? "",
+    allowedReasoningEfforts: activePreset?.allowed_reasoning_efforts ?? null,
     codexFastMode: activePreset?.codex_fast_mode ?? null,
     supportsImages: (activePreset ? activePreset.supports_images : payload.agent.supports_images) ?? true,
     api: activePreset ? activePreset.api ?? null : payload.agent.api ?? null,
@@ -422,6 +425,8 @@ export function ModelsSettings({
       contextWindowTokens: normalizeContextWindowTokens(preset.context_window_tokens),
       temperature: preset.temperature,
       reasoningEffort: preset.reasoning_effort ?? "",
+      allowedReasoningEfforts: preset.allowed_reasoning_efforts
+        ? [...preset.allowed_reasoning_efforts] : null,
       codexFastMode: preset.codex_fast_mode ?? null,
       supportsImages: preset.supports_images ?? true,
       api: preset.api ?? null,
@@ -602,15 +607,16 @@ export function ModelsSettings({
         />
       </SettingsRow>
       <SettingsRow title={tx("settings.models.reasoningEffort", "Reasoning effort")}>
-        <ReasoningEffortPicker
-          onSelect={edits.complete}
+        <ReasoningEffortSettingsControl
           token={token}
           provider={selectedProvider ?? settings.providers.find((provider) => provider.name === selectedPreset?.resolved_provider)}
           model={form.model}
           savedValues={form.model === selectedPreset?.model && form.provider === selectedPreset.provider
             ? selectedPreset.reasoning_effort_values : undefined}
-          value={form.reasoningEffort}
-          onChange={(reasoningEffort) => setForm((prev) => ({ ...prev, reasoningEffort }))}
+          value={form}
+          disabled={saving || creatingSaving}
+          onSelect={edits.complete}
+          onChange={(next) => setForm((prev) => ({ ...prev, ...next }))}
         />
       </SettingsRow>
       {supportsCodexSpeed && (

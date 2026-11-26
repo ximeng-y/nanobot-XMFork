@@ -2,8 +2,8 @@ import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CodexSpeedControl } from "@/components/ui/codex-speed-control";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip-primitives";
+import { orderReasoningEfforts } from "@/lib/provider-model-catalog";
 import type { ModelOptionsCapability, SessionModelOptions } from "@/lib/types";
 
 import "./model-options-control.css";
@@ -16,12 +16,15 @@ export interface ModelOptionsControlProps {
 function ReasoningEffortControl({ options, selected, mode, onChange }: {
   options: (string | null)[];
   selected: number;
-  mode: "ordered" | "pending" | "custom";
+  mode: "ordered" | "pending";
   onChange: (value: string | null) => void;
 }) {
   const { t } = useTranslation();
   const label = t("settings.models.reasoningEffort");
   const auto = t("settings.values.auto");
+  const effortLabel = (effort: string | null) => effort === "none"
+    ? t("settings.models.reasoningEffortOff")
+    : effort ?? auto;
   const last = options.length - 1;
   const axisRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLSpanElement>(null);
@@ -29,8 +32,8 @@ function ReasoningEffortControl({ options, selected, mode, onChange }: {
   const drag = useRef<{ start: number; span: number; offset: number } | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
   const position = preview ?? selected / Math.max(last, 1);
-  const selectedLabel = options[selected] ?? auto;
-  const previewLabel = options[Math.round(position * last)] ?? auto;
+  const selectedLabel = effortLabel(options[selected]);
+  const previewLabel = effortLabel(options[Math.round(position * last)]);
 
   function positionAt(clientX: number) {
     const { start, span, offset } = drag.current!;
@@ -56,23 +59,6 @@ function ReasoningEffortControl({ options, selected, mode, onChange }: {
   function endDrag() {
     drag.current = null;
     setPreview(null);
-  }
-  if (mode === "custom" && last > 0) {
-    return (
-      <div className="reasoning-effort flex-1 justify-between text-xs">
-        <span className="min-w-0 truncate" title={label}>{label}</span>
-        <Select value={String(selected)} onValueChange={(index) => onChange(options[Number(index)])}>
-          <SelectTrigger aria-label={label} className="h-7 min-w-0 max-w-[55%] shrink-0 px-2 text-xs max-sm:h-11">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {options.map((option, index) => (
-              <SelectItem key={index} value={String(index)} className="max-sm:min-h-11">{option ?? auto}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    );
   }
   return (
     <div className="reasoning-effort text-xs">
@@ -123,7 +109,17 @@ function ReasoningEffortControl({ options, selected, mode, onChange }: {
             onChange={(event) => onChange(options[event.currentTarget.valueAsNumber])} />
         </div>
       ) : (
-        <span className="ms-auto min-w-0 max-w-[50%] truncate font-medium text-foreground" title={selectedLabel}>{selectedLabel}</span>
+        <>
+          <span className="reasoning-effort-single-mark" aria-hidden="true">
+            <span className="reasoning-effort-track">
+              <span className="reasoning-effort-lane" />
+              <span className="reasoning-effort-tick" />
+            </span>
+          </span>
+          <span className="ms-auto min-w-0 max-w-[50%] truncate font-medium text-foreground" title={selectedLabel}>
+            {selectedLabel}
+          </span>
+        </>
       )}
     </div>
   );
@@ -135,11 +131,17 @@ export function ModelOptionsControl({ data, onChange }: ModelOptionsControlProps
   const defaultEffort = capability.reasoning_effort.default;
   const effectiveEffort = value.reasoning_effort ?? defaultEffort;
   // Keep preset and session values selectable even if they aren't in the model catalog.
-  const values = [...new Set([...efforts, defaultEffort, value.reasoning_effort].filter((effort): effort is string => !!effort))];
+  const values = orderReasoningEfforts([
+    ...efforts,
+    defaultEffort,
+    value.reasoning_effort,
+  ].filter((effort): effort is string => !!effort));
   const speed = capability.codex_fast_mode;
   if (!values.length && !speed) return null;
   const options = defaultEffort === null ? [null, ...values] : values;
-  const mode = values.every((effort) => efforts.includes(effort)) ? "ordered" : effortsPending ? "pending" : "custom";
+  const mode = values.every((effort) => efforts.includes(effort))
+    ? "ordered"
+    : effortsPending ? "pending" : "ordered";
   return (
     <div className="model-options-row mt-1 flex shrink-0 items-center gap-1 border-t border-border/55 px-2 py-1">
       {values.length > 0 ? (

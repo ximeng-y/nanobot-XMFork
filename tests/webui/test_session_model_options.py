@@ -278,6 +278,27 @@ async def test_reload_recovers_last_used_choices_and_preset_switch_clears_both(g
         await other.state.aclose()
 
 
+async def test_explicit_allowlist_filters_removed_session_effort_and_keeps_fast(gateway):
+    config = gateway.config
+    config.model_presets["deep"].reasoning_effort = "low"
+    config.model_presets["deep"].allowed_reasoning_efforts = ["low", "max"]
+    save_config(config, gateway.path)
+
+    first_provider = RecordingProvider()
+    first_loop = gateway.loop(first_provider)
+    await first_loop.set_session_model_preset("websocket:chat", "deep")
+    await gateway.run(first_loop, model_options=ModelOptions("max", True).to_dict())
+    assert first_provider.calls[-1] == ("max", ModelOptions("max", True))
+
+    config = gateway.config
+    config.model_presets["deep"].allowed_reasoning_efforts = ["low"]
+    save_config(config, gateway.path)
+
+    next_provider = RecordingProvider()
+    await gateway.run(gateway.loop(next_provider))
+    assert next_provider.calls[-1] == ("low", ModelOptions(None, True))
+
+
 @pytest.mark.parametrize("content,fields", [("!echo synthetic", {"user_shell": True}), ("/status", {}), ("/restart", {})])
 async def test_shell_and_commands_do_not_consume_composer_choices(gateway, content, fields):
     options = ModelOptions("max", True)

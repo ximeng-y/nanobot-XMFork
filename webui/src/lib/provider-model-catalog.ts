@@ -82,3 +82,26 @@ export function getProviderModelCatalog(revision: object, token: string, provide
 export function reasoningEffortValues(payload: ProviderModelsPayload | null, model: string, savedValues?: string[]): string[] {
   return [...new Set((payload?.models.find((entry) => entry.id === model)?.reasoning_efforts ?? savedValues ?? []).filter(Boolean))];
 }
+
+const STANDARD_REASONING_EFFORTS = ["none", "low", "medium", "high", "xhigh", "max"];
+
+/** Put standard levels first and retain custom levels in their source order. */
+export function orderReasoningEfforts(values: string[]): string[] {
+  const unique = [...new Set(values.filter(Boolean))];
+  const standard = STANDARD_REASONING_EFFORTS.filter((effort) => unique.includes(effort));
+  const extra = unique.filter((effort) => !STANDARD_REASONING_EFFORTS.includes(effort));
+  return [...standard, ...extra];
+}
+
+export function sameReasoningEfforts(
+  left: string[] | null | undefined,
+  right: string[] | null | undefined,
+): boolean {
+  const normalizedLeft = left ?? null;
+  const normalizedRight = right ?? null;
+  if (normalizedLeft === null || normalizedRight === null) {
+    return normalizedLeft === normalizedRight;
+  }
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((effort, index) => effort === normalizedRight[index]);
+}

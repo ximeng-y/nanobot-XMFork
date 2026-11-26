@@ -1290,6 +1290,11 @@ describe("Settings models", () => {
     fireEvent.click(screen.getByRole("button", { name: "New preset" }));
     expect(screen.getByRole("dialog", { name: "New preset" })).toBeInTheDocument();
     expect(presetSaveButton()).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Manual" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "high" })).toBeChecked();
+    for (const effort of ["Off", "low", "medium", "xhigh", "max"]) {
+      expect(screen.getByRole("checkbox", { name: effort })).not.toBeChecked();
+    }
     fireEvent.change(screen.getByRole("textbox", { name: "Preset name" }), {
       target: { value: "Writer" },
     });
@@ -1308,8 +1313,14 @@ describe("Settings models", () => {
       expect(requestMutationMock).toHaveBeenCalledWith(
         "settings.model_configuration.create",
         expect.objectContaining(optimized
-          ? { name: "Writer", supports_images: false, append_to_order: true, include_usage: false }
-          : { name: "Writer", supports_images: false }),
+          ? {
+              name: "Writer", supports_images: false, append_to_order: true, include_usage: false,
+              reasoning_effort: "high", allowed_reasoning_efforts: ["high"],
+            }
+          : {
+              name: "Writer", supports_images: false,
+              reasoning_effort: "high", allowed_reasoning_efforts: ["high"],
+            }),
         20_000,
       );
       if (optimized) {
@@ -2219,6 +2230,55 @@ describe("Settings models", () => {
     fireEvent.click(presetSaveButton());
     await waitFor(() => expect(requestMutationMock).toHaveBeenCalledWith(
       "settings.model_configuration.update", expect.objectContaining({ reasoning_effort: "provider-native-mode" }), expect.any(Number),
+    ));
+  });
+
+  it("saves manually selected reasoning levels and their default", async () => {
+    const payload = settingsPayload();
+    payload.model_presets[0].provider = "openai";
+    payload.model_presets[0].resolved_provider = "openai";
+    payload.model_presets[0].reasoning_effort = "high";
+    payload.model_presets[0].reasoning_effort_values = ["", "low", "medium", "high"];
+    payload.model_presets[0].allowed_reasoning_efforts = ["high", "extended"];
+    payload.providers = [{ name: "openai", label: "OpenAI", configured: true }];
+    const catalog: ProviderModelsPayload = {
+      provider: "openai",
+      label: "OpenAI",
+      status: "available",
+      catalog_kind: "official",
+      models: [],
+      model_count: 0,
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/provider-models?")
+        ? jsonResponse(catalog)
+        : jsonResponse(payload)));
+    requestMutationMock.mockResolvedValue(payload);
+    renderSettingsView({ initialSection: "models", initialSettings: payload });
+    await togglePresetEditor();
+
+    expect(screen.getByRole("switch", { name: "Manual" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "high" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "extended" })).toBeChecked();
+    const defaultEffort = screen.getByRole("combobox", { name: "Default level" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "high" }));
+    expect(defaultEffort).toHaveValue("");
+    fireEvent.click(screen.getByRole("checkbox", { name: "high" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "xhigh" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "max" }));
+    fireEvent.change(defaultEffort, {
+      target: { value: "max" },
+    });
+    fireEvent.click(presetSaveButton());
+
+    await waitFor(() => expect(requestMutationMock).toHaveBeenCalledWith(
+      "settings.model_configuration.update",
+      expect.objectContaining({
+        name: "primary",
+        reasoning_effort: "max",
+        allowed_reasoning_efforts: ["high", "xhigh", "max", "extended"],
+      }),
+      expect.any(Number),
     ));
   });
 

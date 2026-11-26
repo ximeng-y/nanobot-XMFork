@@ -23,6 +23,46 @@ def test_resolve_preset_returns_defaults_when_no_preset() -> None:
     assert resolved.reasoning_effort == config.agents.defaults.reasoning_effort
 
 
+def test_allowed_reasoning_efforts_normalize_and_require_default_membership() -> None:
+    config = Config.model_validate({
+        "modelPresets": {
+            "deep": {
+                "model": "deepseek-v4-pro",
+                "provider": "deepseek",
+                "reasoningEffort": "high",
+                "allowedReasoningEfforts": [" high ", "low", "high"],
+            }
+        }
+    })
+    assert config.model_presets["deep"].allowed_reasoning_efforts == ["high", "low"]
+
+    with pytest.raises(ValueError, match="reasoning_effort must be one of"):
+        Config.model_validate({
+            "modelPresets": {
+                "deep": {
+                    "model": "deepseek-v4-pro",
+                    "provider": "deepseek",
+                    "reasoningEffort": "medium",
+                    "allowedReasoningEfforts": ["low", "high"],
+                }
+            }
+        })
+
+
+@pytest.mark.parametrize("value", [["low", 1], ["low", ""], ["low", "bad\neffort"]])
+def test_allowed_reasoning_efforts_reject_invalid_entries(value) -> None:
+    with pytest.raises(ValueError, match="allowed_reasoning_efforts"):
+        Config.model_validate({
+            "modelPresets": {
+                "deep": {
+                    "model": "deepseek-v4-pro",
+                    "provider": "deepseek",
+                    "allowedReasoningEfforts": value,
+                }
+            }
+        })
+
+
 def test_model_preset_catalog_missing_env_reports_explicit_config_path(
     tmp_path,
     monkeypatch,

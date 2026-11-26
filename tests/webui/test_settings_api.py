@@ -782,6 +782,61 @@ def test_model_configuration_advanced_options_round_trip(
     assert row["reasoning_effort"] is None
 
 
+def test_reasoning_effort_allowlist_round_trip_validation_and_null(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config = Config()
+    config.providers.openai.api_key = "sk-test"
+    save_config(config, config_path)
+    monkeypatch.setattr("nanobot.config.loader._current_config_path", config_path)
+
+    created = create_model_configuration({
+        "name": ["Reasoning"],
+        "provider": ["openai"],
+        "model": ["openai/o3"],
+        "reasoning_effort": ["high"],
+        "allowed_reasoning_efforts": [json.dumps([" max ", "high", "max"])],
+    })
+    row = next(row for row in created["model_presets"] if row["name"] == "Reasoning")
+    assert row["allowed_reasoning_efforts"] == ["max", "high"]
+    assert row["model_options"]["reasoning_effort"] == {
+        "default": "high", "values": ["max", "high"],
+    }
+
+    omitted = update_model_configuration({
+        "name": ["Reasoning"],
+        "reasoning_effort": ["max"],
+    })
+    row = next(row for row in omitted["model_presets"] if row["name"] == "Reasoning")
+    assert row["allowed_reasoning_efforts"] == ["max", "high"]
+
+    before_invalid = config_path.read_bytes()
+    with pytest.raises(WebUISettingsError, match="reasoning_effort must be one of"):
+        update_model_configuration({
+            "name": ["Reasoning"],
+            "allowed_reasoning_efforts": ["[]"],
+        })
+    assert config_path.read_bytes() == before_invalid
+
+    cleared = update_model_configuration({
+        "name": ["Reasoning"],
+        "reasoning_effort": [""],
+        "allowed_reasoning_efforts": ["[]"],
+    })
+    row = next(row for row in cleared["model_presets"] if row["name"] == "Reasoning")
+    assert row["reasoning_effort"] is None
+    assert row["allowed_reasoning_efforts"] == []
+
+    automatic = update_model_configuration({
+        "name": ["Reasoning"],
+        "allowed_reasoning_efforts": [json.dumps(None)],
+    })
+    row = next(row for row in automatic["model_presets"] if row["name"] == "Reasoning")
+    assert row["allowed_reasoning_efforts"] is None
+
+
 @pytest.mark.parametrize("protocol", ["responses", "anthropic_messages"])
 def test_custom_preset_api_round_trip_and_reset(tmp_path, monkeypatch, protocol):
     config_path = tmp_path / "config.json"

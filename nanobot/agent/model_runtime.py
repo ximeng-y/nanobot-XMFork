@@ -19,6 +19,7 @@ from nanobot.providers.factory import (
     provider_signature,
     validate_provider_setup,
 )
+from nanobot.providers.model_options import ModelOptions
 from nanobot.providers.request_overrides import isolate_request_overrides
 from nanobot.utils.llm_runtime import LLMRuntime, runtime_from_provider_snapshot
 
@@ -135,6 +136,23 @@ class ModelRuntimeResolver:
             self.refresh()
         self._refresh_provider_generation()
         return self._runtime
+
+    def apply_model_options(
+        self,
+        runtime: LLMRuntime,
+        options: ModelOptions,
+    ) -> LLMRuntime:
+        """Apply session overrides after enforcing the preset's explicit allowlist."""
+        preset = (
+            self._model_presets.get(runtime.model_preset)
+            if runtime.model_preset is not None
+            else None
+        )
+        allowed = preset.allowed_reasoning_efforts if preset is not None else None
+        effort = options.reasoning_effort
+        if allowed is not None and effort is not None and effort not in allowed:
+            options = replace(options, reasoning_effort=None)
+        return runtime.with_model_options(options)
 
     def invalidate(self) -> None:
         """Refresh configured runtime state on the next admission."""

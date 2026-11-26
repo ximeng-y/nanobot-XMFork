@@ -49,6 +49,24 @@ it("shares lazy settings recommendations and uses backend capability description
   expect(view.result.current.sendValue()).toBeUndefined();
 });
 
+it("uses an explicit effort list without loading the catalog and clears removed overrides", () => {
+  const initial = props();
+  const configuration = initial.settings.model_presets[0];
+  configuration.allowed_reasoning_efforts = ["max", "none", "low", "custom"];
+  configuration.model_options!.reasoning_effort = {
+    default: "max", values: ["max", "none", "low", "custom"],
+  };
+  const storedValue = { reasoning_effort: "high", codex_fast_mode: true };
+  const view = renderHook(useSessionModelOptions, {
+    wrapper: wrapper(), initialProps: { ...initial, open: true, storedValue },
+  });
+  expect(api.fetchProviderModels).not.toHaveBeenCalled();
+  expect(view.result.current.data?.efforts).toEqual(["none", "low", "max", "custom"]);
+  expect(view.result.current.data?.value).toEqual({ reasoning_effort: null, codex_fast_mode: true });
+  act(() => view.result.current.select(storedValue));
+  expect(view.result.current.sendValue()).toEqual({ reasoning_effort: null, codex_fast_mode: true });
+});
+
 it("coalesces browser writes, immediately transmits false/null, and flushes pagehide without gateway mutations", () => {
   const view = renderHook(useSessionModelOptions, { wrapper: wrapper(), initialProps: props() });
   const mutation = vi.spyOn(NanobotClient.prototype, "requestMutation");

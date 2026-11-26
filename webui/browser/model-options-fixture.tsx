@@ -34,11 +34,13 @@ const codexEfforts = ["none", "low", "medium", "high", "xhigh"];
 function preset(
   name: string, provider: keyof typeof providers, model: string, effort: string | null = "medium",
   values = ["low", "medium", "high"], speed?: ModelOptionsCapability["codex_fast_mode"],
+  allowed: string[] | null | undefined = values,
 ): Preset {
   return {
     name, label: name, active: false, is_default: false, model, provider, resolved_provider: provider,
     max_tokens: 8192, context_window_tokens: 200_000, temperature: 0.1,
     reasoning_effort: effort, reasoning_effort_values: values,
+    ...(allowed === undefined ? {} : { allowed_reasoning_efforts: allowed }),
     model_options: { reasoning_effort: { default: effort, values }, ...(speed && { codex_fast_mode: speed }) },
   };
 }
@@ -66,12 +68,15 @@ const groups = [
   { id: "local", label: isChinese ? "本地与自建" : "Local & self-hosted", presets: [
     preset("Ollama", "ollama", "qwen3:8b", null),
     preset("vLLM", "vllm", "Qwen/Qwen3-32B", "high"),
-    preset("Custom API", "custom", "team-assistant", "extended"),
+    preset("Custom API", "custom", "team-assistant", "extended", ["low", "medium", "high", "extended"]),
   ] },
 ];
 const group = groups.find(({ id }) => id === params.get("group")) ?? groups[0]!;
 const base = loadCodexCatalog
-  ? preset("Review", "openai_codex", "openai-codex/gpt-6.2-sol", "xhigh", ["low", "medium", "high"], { default: false, ultrafast_supported: true })
+  ? preset(
+      "Review", "openai_codex", "openai-codex/gpt-6.2-sol", "xhigh",
+      ["low", "medium", "high"], { default: false, ultrafast_supported: true }, undefined,
+    )
   : group.id === "oauth" ? (params.has("ultrafast") ? ultrafastCodex : standardCodex) : group.presets[0]!;
 const extraPresets = params.has("many-presets")
   ? Array.from({ length: 12 }, (_, index) => preset(`Example ${index + 1}`, "openai_codex", "gpt-6.2-sol"))

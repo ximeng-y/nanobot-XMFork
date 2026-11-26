@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useProviderModelCatalog } from "@/hooks/useProviderModelCatalog";
-import { reasoningEffortValues } from "@/lib/provider-model-catalog";
+import { orderReasoningEfforts, reasoningEffortValues } from "@/lib/provider-model-catalog";
 import type { SessionModelOptions, SettingsPayload } from "@/lib/types";
 import { useClient } from "@/providers/ClientProvider";
 
@@ -10,6 +10,17 @@ const PREFIX = "nanobot.model-options.v1.";
 const INHERIT: SessionModelOptions = { reasoning_effort: null, codex_fast_mode: null };
 type Preference = { preset: string; options: SessionModelOptions };
 const preferenceKey = (host: string, session: string | null) => `${PREFIX}${JSON.stringify([host, session])}`;
+
+function normalizeOptions(
+  options: SessionModelOptions,
+  allowed: string[] | null | undefined,
+): SessionModelOptions {
+  return allowed !== undefined && allowed !== null
+    && options.reasoning_effort !== null
+    && !allowed.includes(options.reasoning_effort)
+    ? { ...options, reasoning_effort: null }
+    : options;
+}
 
 function readPreference(key: string): Preference | null {
   try {
@@ -47,7 +58,11 @@ export function useSessionModelOptions({ sessionKey, preset, settings, open, dis
   if (!entries.current.has(key)) entries.current.set(key, readPreference(key));
   const saved = entries.current.get(key);
   const localOptions = saved?.preset === preset ? saved.options : undefined;
-  const value = localOptions ?? storedValue ?? INHERIT;
+  const configuration = settings?.model_presets.find((entry) => entry.name === preset);
+  const capability = configuration?.model_options;
+  const allowedEfforts = configuration?.allowed_reasoning_efforts;
+  const hasExplicitEfforts = allowedEfforts !== undefined && allowedEfforts !== null;
+  const value = normalizeOptions(localOptions ?? storedValue ?? INHERIT, allowedEfforts);
   const pending = useRef(new Map<string, Preference | null>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flush = useCallback(() => {
@@ -71,17 +86,20 @@ export function useSessionModelOptions({ sessionKey, preset, settings, open, dis
     return () => { window.removeEventListener("pagehide", flush); flush(); };
   }, [flush]);
 
-  const configuration = settings?.model_presets.find((entry) => entry.name === preset);
-  const capability = configuration?.model_options;
   const providerName = configuration?.resolved_provider ?? configuration?.provider;
   const provider = settings?.providers.find((entry) => entry.name === providerName);
   const model = configuration?.model ?? "";
-  const canLoadCatalog = enabled && !!capability && !!model && !!provider?.configured && provider.model_catalog !== "unsupported";
+  const canLoadCatalog = enabled && !hasExplicitEfforts && !!capability && !!model
+    && !!provider?.configured && provider.model_catalog !== "unsupported";
   const { payload, loading, failed } = useProviderModelCatalog({
     revision: provider ?? NO_PROVIDER, token, provider: provider?.name ?? "",
     enabled: canLoadCatalog && open,
   });
-  const efforts = reasoningEffortValues(payload, model, capability?.reasoning_effort.values);
+  const efforts = orderReasoningEfforts(
+    hasExplicitEfforts
+      ? allowedEfforts ?? []
+      : reasoningEffortValues(payload, model, capability?.reasoning_effort.values),
+  );
   // The popover renders its contents before it starts the lazy catalog request.
   const effortsPending = canLoadCatalog && (loading || (!payload && !failed));
   const select = useCallback((options: SessionModelOptions) => {
@@ -101,7 +119,12 @@ export function useSessionModelOptions({ sessionKey, preset, settings, open, dis
   }, [enabled, flush, host, key, preset, remember, sessionKey]);
 
   // The Gateway owns persisted options. Omission preserves them; null fields explicitly clear them.
-  const sendValue = useCallback(() => enabled ? localOptions : undefined, [enabled, localOptions]);
+  const sendValue = useCallback(
+    () => enabled && localOptions
+      ? normalizeOptions(localOptions, allowedEfforts)
+      : undefined,
+    [allowedEfforts, enabled, localOptions],
+  );
   return {
     data: enabled && capability ? { value, capability, efforts, effortsPending } : null,
     select, reset, moveToSession, sendValue,

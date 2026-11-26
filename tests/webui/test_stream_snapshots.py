@@ -26,7 +26,6 @@ def _gateway(history, tmp_path, monkeypatch):
         return path
 
     monkeypatch.setattr("nanobot.webui.media_gateway.get_media_dir", media_dir)
-    monkeypatch.setattr("nanobot.webui.gateway_services.get_media_dir", media_dir)
     bus = MessageBus()
     gateway = build_gateway_services(
         config=WebSocketConfig(), bus=bus, session_manager=history.sessions,

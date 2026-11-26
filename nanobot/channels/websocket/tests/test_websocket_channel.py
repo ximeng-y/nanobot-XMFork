@@ -17,6 +17,7 @@ from websockets.exceptions import ConnectionClosed
 from websockets.frames import Close
 
 from nanobot.agent.dream import DreamResult
+from nanobot.attachments.runtime import clear_attachment_services
 from nanobot.bus.events import (
     INBOUND_META_RUNTIME_CONTROL,
     INBOUND_META_USER_SHELL,
@@ -172,6 +173,7 @@ def _basic_handler(bus: Any, **kw: Any) -> GatewayServices:
         runtime_model_name=None,
         runtime_surface=kw.get("runtime_surface", "browser"),
         runtime_capabilities_overrides=kw.get("runtime_capabilities_overrides"),
+        config_path=kw.get("config_path"),
     )
 
 
@@ -607,6 +609,109 @@ async def test_temporary_chat_is_transient_and_discarded(history, bus, tmp_path)
     assert chat_id not in channel._conn_chats.get(connection, set())
     assert not upload.exists()
     assert history.read(inbound.session_key) == []
+
+
+@pytest.mark.asyncio
+async def test_temporary_chat_outbound_copies_are_owned_and_discarded(
+    bus, tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    clear_attachment_services()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source = workspace / "chart.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\noutbound")
+    sessions = SessionManager(workspace)
+    channel = WebSocketChannel(
+        {"enabled": True, "allowFrom": ["*"]},
+        bus,
+        gateway=_basic_handler(
+            bus,
+            session_manager=sessions,
+            workspace_path=workspace,
+            config_path=tmp_path / "config.json",
+        ),
+    )
+    ordinary = AsyncMock()
+    ordinary.remote_address = ("127.0.0.1", 5001)
+    channel._attach(ordinary, "ordinary-chat")
+
+    await channel.send(OutboundMessage(
+        channel="websocket",
+        chat_id="ordinary-chat",
+        content="ordinary",
+        media=[str(source)],
+    ))
+    ordinary_record = channel.gateway.attachments.find_outbound_for_source_path(
+        source, "websocket:ordinary-chat",
+    )
+    assert ordinary_record is not None
+    ordinary_copy = channel.gateway.attachments.store.resolve_relative(
+        ordinary_record.files[0].relative_path,
+    )
+    ordinary_session = await sessions.state.get("websocket:ordinary-chat")
+    ordinary_session.add_message("assistant", "ordinary", media=[str(ordinary_copy)])
+    await sessions.state.finish_turn(ordinary_session)
+
+    owner = AsyncMock()
+    owner.remote_address = ("127.0.0.1", 5002)
+    chat_id = await _new_temporary_chat(channel, owner)
+    await channel.send(OutboundMessage(
+        channel="websocket",
+        chat_id=chat_id,
+        content="temporary",
+        media=[str(source)],
+    ))
+    await channel.send(OutboundMessage(
+        channel="websocket",
+        chat_id=chat_id,
+        content="![inline](chart.png)",
+    ))
+    await channel.send_delta(
+        chat_id,
+        "![chart](chart.png)",
+        stream_id="temporary-stream",
+        stream_end=True,
+    )
+
+    media_dir = channel.gateway.attachments.data_dir / "media" / "websocket"
+    temporary_copies = [
+        path for path in media_dir.iterdir()
+        if path.is_file() and path.name.startswith(f"temp-{chat_id}-")
+    ]
+    assert len(temporary_copies) == 1
+    temporary_copy = temporary_copies[0]
+    assert temporary_copy != ordinary_copy
+    assert channel.gateway.attachments.store.records_for_path(temporary_copy) == []
+    assert str(temporary_copy) in channel.gateway.temporary_chats._media_paths[chat_id]
+    assert [
+        item["id"] for item in channel.gateway.attachments.management_payload()["items"]
+    ] == [ordinary_record.id]
+
+    channel.gateway.attachments.update_policy(
+        max_bytes=None,
+        auto_cleanup=True,
+        orphan_days=1,
+    )
+    channel.gateway.attachments.cleanup_orphans(
+        now=datetime.now().astimezone() + timedelta(days=365),
+    )
+    assert temporary_copy.exists()
+
+    await channel.gateway.temporary_chats.discard(owner, chat_id)
+    assert not temporary_copy.exists()
+    assert ordinary_copy.exists()
+    assert source.exists()
+    await channel.send(OutboundMessage(
+        channel="websocket",
+        chat_id=chat_id,
+        content="late",
+        media=[str(source)],
+    ))
+    assert not list(
+        path for path in media_dir.iterdir()
+        if path.is_file() and path.name.startswith(f"temp-{chat_id}-")
+    )
 
 
 @pytest.mark.asyncio

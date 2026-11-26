@@ -232,13 +232,23 @@ async def test_session_history_does_not_restage_deleted_markdown_copy(
         second = await http.get(http_url + path, headers=headers)
         assert second.status == 200
         second_payload = await second.json()
-        second_text = next(
-            event["text"] for event in second_payload["events"]
-            if event.get("event") == "message" and "chart" in event.get("text", "")
+        second_event = next(
+            event for event in second_payload["events"]
+            if event.get("event") == "message" and "chart below" in event.get("text", "")
         )
+        second_text = second_event["text"]
 
-    assert markdown in second_text
+    assert "chart below" in second_text
+    assert "chart" in second_text
+    assert "![chart]" not in second_text
     assert "/api/media/" not in second_text
+    assert second_event.get("media_urls") == [{
+        "kind": "image",
+        "name": "chart.png",
+        "managed_id": record.id,
+        "deleted": True,
+        "url": "",
+    }]
     assert source.exists()
     assert not list(
         (channel.gateway.attachments.data_dir / "media" / "websocket").glob("*-chart.png"),
@@ -304,21 +314,163 @@ async def test_subagent_history_passes_session_key_to_markdown_projection(
         second = await http.get(http_url + path, headers=headers)
         assert second.status == 200
         second_payload = await second.json()
-        second_messages = [
-            event["text"] for event in second_payload["events"]
+        second_events = [
+            event for event in second_payload["events"]
             if event.get("event") == "message" and "subagent chart" in event.get("text", "")
         ]
-        assert second_messages, second_payload
-        second_text = second_messages[0]
+        assert second_events, second_payload
+        second_event = second_events[0]
+        second_text = second_event["text"]
 
-    assert markdown in second_text
+    assert "subagent chart" in second_text
+    assert "subagent" in second_text
+    assert "![subagent]" not in second_text
     assert "/api/media/" not in second_text
+    assert second_event.get("media_urls") == [{
+        "kind": "image",
+        "name": "subagent-chart.png",
+        "managed_id": record.id,
+        "deleted": True,
+        "url": "",
+    }]
     assert source.exists()
     assert not list(
         (channel.gateway.attachments.data_dir / "media" / "websocket").glob(
             "*-subagent-chart.png",
         ),
     )
+
+
+async def test_stream_end_with_signed_markdown_projects_deleted_media(
+    attachment_gateway,
+    tmp_path: Path,
+) -> None:
+    channel, http_url, _ = attachment_gateway
+    source = tmp_path / "workspace" / "signed-chart.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nsigned")
+    session_key = "websocket:signed-stream"
+    signed = channel.gateway.media.sign_or_stage_media_path(
+        source, session_key=session_key,
+    )
+    assert signed is not None and signed["url"]
+    markdown = f"stream chart\n\n![signed]({signed['url']})"
+    session = await channel.gateway.session_manager.state.get(session_key)
+    session.metadata["title"] = "signed stream"
+    await channel.gateway.session_manager.state.append_history(
+        session_key,
+        [
+            HistoryFact(HistoryKind.INPUT, {"text": "show stream chart"}),
+            HistoryFact(
+                HistoryKind.ANSWER_SEGMENT,
+                {"text": markdown},
+                turn_id="signed-stream-turn",
+            ),
+            HistoryFact(HistoryKind.COMPLETION, turn_id="signed-stream-turn"),
+        ],
+        expected_generation=session.generation,
+    )
+    record = channel.gateway.attachments.find_outbound_for_source_path(
+        source, session_key, include_deleted=True,
+    )
+    assert record is not None
+    channel.gateway.attachments.delete([record.id])
+
+    api_token = channel.gateway.tokens.issue_api_token(60)
+    path = f"/api/sessions/{quote(session_key, safe='')}/webui-thread"
+    async with aiohttp.ClientSession(trust_env=False) as http:
+        response = await http.get(
+            http_url + path,
+            headers={"Authorization": f"Bearer {api_token}"},
+        )
+        assert response.status == 200
+        payload = await response.json()
+
+    event = next(
+        event for event in payload["events"]
+        if event.get("event") == "stream_end" and "stream chart" in event.get("text", "")
+    )
+    assert "signed" in event["text"]
+    assert "/api/media/" not in event["text"]
+    assert event["media_urls"] == [{
+        "kind": "image",
+        "name": "signed-chart.png",
+        "managed_id": record.id,
+        "deleted": True,
+        "url": "",
+    }]
+    assert source.exists()
+    assert not signed["url"] in event["text"]
+
+
+async def test_deleted_markdown_media_keeps_other_session_reference(
+    attachment_gateway,
+    tmp_path: Path,
+) -> None:
+    channel, http_url, _ = attachment_gateway
+    source = tmp_path / "workspace" / "shared-chart.png"
+    source.write_bytes(b"\x89PNG\r\n\x1a\nshared")
+    markdown = "shared chart\n\n![shared](shared-chart.png)"
+    first_key = "websocket:shared-first"
+    second_key = "websocket:shared-second"
+    for index, session_key in enumerate((first_key, second_key)):
+        session = await channel.gateway.session_manager.state.get(session_key)
+        session.metadata["title"] = f"shared-{index}"
+        await channel.gateway.session_manager.state.append_history(
+            session_key,
+            [
+                HistoryFact(HistoryKind.INPUT, {"text": "show shared chart"}),
+                HistoryFact(
+                    HistoryKind.ANSWER,
+                    {"text": markdown},
+                    turn_id=f"shared-turn-{index}",
+                ),
+                HistoryFact(HistoryKind.COMPLETION, turn_id=f"shared-turn-{index}"),
+            ],
+            expected_generation=session.generation,
+        )
+
+    api_token = channel.gateway.tokens.issue_api_token(60)
+    headers = {"Authorization": f"Bearer {api_token}"}
+    paths = {
+        key: f"/api/sessions/{quote(key, safe='')}/webui-thread"
+        for key in (first_key, second_key)
+    }
+    async with aiohttp.ClientSession(trust_env=False) as http:
+        for key in (first_key, second_key):
+            response = await http.get(http_url + paths[key], headers=headers)
+            assert response.status == 200
+        first_record = channel.gateway.attachments.find_outbound_for_source_path(
+            source, first_key, include_deleted=True,
+        )
+        second_record = channel.gateway.attachments.find_outbound_for_source_path(
+            source, second_key, include_deleted=True,
+        )
+        assert first_record is not None and second_record is not None
+        channel.gateway.attachments.delete([first_record.id])
+
+        first_response = await http.get(http_url + paths[first_key], headers=headers)
+        second_response = await http.get(http_url + paths[second_key], headers=headers)
+        first_payload = await first_response.json()
+        second_payload = await second_response.json()
+
+    first_event = next(
+        event for event in first_payload["events"]
+        if event.get("event") == "message" and "shared chart" in event.get("text", "")
+    )
+    second_event = next(
+        event for event in second_payload["events"]
+        if event.get("event") == "message" and "shared chart" in event.get("text", "")
+    )
+    assert first_event["media_urls"] == [{
+        "kind": "image",
+        "name": "shared-chart.png",
+        "managed_id": first_record.id,
+        "deleted": True,
+        "url": "",
+    }]
+    assert "/api/media/" in second_event["text"]
+    assert "media_urls" not in second_event
+    assert source.exists()
 
 
 async def test_attachment_mutations_use_contract_and_reject_unknown_ids(

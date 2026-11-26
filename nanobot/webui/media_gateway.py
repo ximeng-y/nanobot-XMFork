@@ -14,12 +14,17 @@ from nanobot.config.paths import get_media_dir
 from nanobot.security.workspace_access import WorkspaceScope
 from nanobot.webui.media_api import (
     media_attachment_kind,
+    media_path_from_signed_url,
     serve_signed_media,
     sign_local_attachment,
     sign_media_path,
     sign_or_stage_media_path,
 )
-from nanobot.webui.transcript import rewrite_local_markdown_images
+from nanobot.webui.transcript import (
+    AssistantTextProjection,
+    project_history_markdown_media,
+    rewrite_local_markdown_images,
+)
 
 
 def _default_media_dir(channel: str | None) -> Path:
@@ -62,7 +67,12 @@ class WebUIMediaGateway:
         )
 
     def sign_or_stage_media_path(
-        self, path: Path, *, session_key: str | None = None,
+        self,
+        path: Path,
+        *,
+        session_key: str | None = None,
+        temporary_namespace: str | None = None,
+        register_temporary_copy: Callable[[Path], bool] | None = None,
     ) -> dict[str, str] | None:
         return sign_or_stage_media_path(
             path,
@@ -71,6 +81,8 @@ class WebUIMediaGateway:
             logger=self.logger,
             session_key=session_key,
             attachments=self.attachments,
+            temporary_namespace=temporary_namespace,
+            register_temporary_copy=register_temporary_copy,
         )
 
     def rewrite_local_markdown_images(
@@ -79,13 +91,63 @@ class WebUIMediaGateway:
         *,
         workspace_path: Path | None = None,
         session_key: str | None = None,
+        temporary_namespace: str | None = None,
+        register_temporary_copy: Callable[[Path], bool] | None = None,
     ) -> str:
         return rewrite_local_markdown_images(
             text,
             workspace_path=workspace_path or self.workspace_path,
             sign_path=lambda path: self.sign_or_stage_media_path(
-                path, session_key=session_key,
+                path,
+                session_key=session_key,
+                temporary_namespace=temporary_namespace,
+                register_temporary_copy=register_temporary_copy,
             ),
+        )
+
+    def augment_transcript_assistant_text(
+        self,
+        text: str,
+        *,
+        workspace_path: Path | None = None,
+        session_key: str | None = None,
+    ) -> AssistantTextProjection:
+        def resolve_reference(reference: str) -> tuple[str | None, dict[str, Any] | None]:
+            signed = reference.startswith("/api/media/")
+            if signed:
+                path = media_path_from_signed_url(
+                    reference, secret=self.secret, media_dir=self._media_dir,
+                )
+                if path is None:
+                    return None, None
+            else:
+                path = Path(reference)
+            managed = self._managed_record(
+                path, session_key, include_outbound=True,
+            )
+            if managed is not None and managed.status == "deleted":
+                return None, {
+                    "kind": managed.kind,
+                    "name": managed.name or path.name,
+                    "managed_id": managed.id,
+                    "deleted": True,
+                    "url": "",
+                }
+            if signed:
+                return reference, None
+            projected = self.sign_or_stage_media_path(
+                path, session_key=session_key,
+            )
+            return (
+                str(projected["url"])
+                if projected is not None and projected.get("url")
+                else None
+            ), None
+
+        return project_history_markdown_media(
+            text,
+            workspace_path=workspace_path or self.workspace_path,
+            resolve_reference=resolve_reference,
         )
 
     def augment_transcript_media(
@@ -170,7 +232,7 @@ class WebUIMediaGateway:
         try:
             records = self.attachments.store.records_for_path(path)
         except (OSError, ValueError):
-            return None
+            records = []
         if session_key is not None:
             owned = [
                 record for record in records

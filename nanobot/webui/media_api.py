@@ -14,6 +14,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlparse
 
 from websockets.http11 import Request as WsRequest
 from websockets.http11 import Response
@@ -126,6 +127,44 @@ def sign_local_attachment(path: str, *, session_key: str, secret: bytes) -> str:
     return f"/api/media/{b64url_encode(mac)}/{payload}"
 
 
+def media_path_from_signed_url(
+    url: str,
+    *,
+    secret: bytes,
+    media_dir: MediaDirProvider = _default_media_dir,
+) -> Path | None:
+    """把受限媒体 URL 还原为 media 根内的路径；借用路径不在这里解析。"""
+    parsed = urlparse(url)
+    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+        return None
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) != 4 or parts[:2] != ["api", "media"]:
+        return None
+    sig_text, payload_text = parts[2:]
+    try:
+        provided_mac = b64url_decode(sig_text)
+    except (ValueError, binascii.Error):
+        return None
+    expected_mac = hmac.new(
+        secret, payload_text.encode("ascii"), hashlib.sha256,
+    ).digest()[:16]
+    if not hmac.compare_digest(expected_mac, provided_mac):
+        return None
+    try:
+        relative_text = b64url_decode(payload_text).decode("utf-8")
+    except (ValueError, binascii.Error, UnicodeDecodeError):
+        return None
+    if relative_text.startswith("\0"):
+        return None
+    try:
+        media_root = media_dir(None).resolve()
+        candidate = (media_root / relative_text).resolve()
+        candidate.relative_to(media_root)
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
 def sign_or_stage_media_path(
     path: Path,
     *,
@@ -134,11 +173,14 @@ def sign_or_stage_media_path(
     logger: Any | None = None,
     session_key: str | None = None,
     attachments: AttachmentService | None = None,
+    temporary_namespace: str | None = None,
+    register_temporary_copy: Callable[[Path], bool] | None = None,
 ) -> dict[str, str] | None:
     """Sign an existing media-root path, or stage an arbitrary file before signing."""
-    signed = sign_media_path(path, secret=secret, media_dir=media_dir)
-    if signed is not None:
-        return {"url": signed, "name": path.name}
+    if temporary_namespace is None:
+        signed = sign_media_path(path, secret=secret, media_dir=media_dir)
+        if signed is not None:
+            return {"url": signed, "name": path.name}
     staged_tmp: Path | None = None
     reservation = None
     created = False
@@ -157,32 +199,40 @@ def sign_or_stage_media_path(
             str(source_stat.st_ctime_ns),
         ))
         source_digest = hashlib.sha256(source_version.encode("utf-8")).hexdigest()[:20]
-        if attachments is not None and session_key:
-            existing = attachments.find_outbound_copy(
-                source_digest, session_key, include_deleted=True,
-            )
-            if existing is not None:
-                if existing.status != "available" or not existing.files:
-                    return None
-                existing_path = attachments.store.resolve_relative(
-                    existing.files[0].relative_path,
+        if temporary_namespace is not None:
+            namespace = safe_filename(temporary_namespace) or "temporary"
+            staged = target_dir / f"temp-{namespace}-{source_digest}-{safe_name}"
+        else:
+            if attachments is not None and session_key:
+                existing = attachments.find_outbound_copy(
+                    source_digest, session_key, include_deleted=True,
                 )
-                signed_existing = sign_media_path(
-                    existing_path, secret=secret, media_dir=media_dir,
-                )
-                return (
-                    {"url": signed_existing, "name": path.name}
-                    if signed_existing is not None
-                    else None
-                )
-            reservation = attachments.reserve(source_stat.st_size, purpose="outbound-copy")
-        staged = target_dir / f"{source_digest}-{safe_name}"
+                if existing is not None:
+                    if existing.status != "available" or not existing.files:
+                        return None
+                    existing_path = attachments.store.resolve_relative(
+                        existing.files[0].relative_path,
+                    )
+                    signed_existing = sign_media_path(
+                        existing_path, secret=secret, media_dir=media_dir,
+                    )
+                    return (
+                        {"url": signed_existing, "name": path.name}
+                        if signed_existing is not None
+                        else None
+                    )
+                reservation = attachments.reserve(source_stat.st_size, purpose="outbound-copy")
+            staged = target_dir / f"{source_digest}-{safe_name}"
         if not staged.is_file() or staged.stat().st_size != source_stat.st_size:
             staged_tmp = target_dir / f".{source_digest}-{uuid.uuid4().hex}.tmp"
             shutil.copyfile(resolved, staged_tmp)
             staged_tmp.replace(staged)
             created = True
-        if attachments is not None and session_key and reservation is not None:
+        if temporary_namespace is not None:
+            if register_temporary_copy is None or not register_temporary_copy(staged):
+                staged.unlink(missing_ok=True)
+                return None
+        elif attachments is not None and session_key and reservation is not None:
             attachments.register_outbound_copy(
                 staged,
                 source_path=resolved,

@@ -148,6 +148,14 @@ class WebUITemporaryChats:
         if self._retain_attachment_paths is not None:
             self._retain_attachment_paths([Path(path) for path in paths])
 
+    def register_staged_media(self, chat_id: str, paths: list[str]) -> bool:
+        """登记服务端实际生成的临时副本；聊天已丢弃时拒绝晚到输出。"""
+        owner = self._owners.get(chat_id)
+        if owner is None:
+            return False
+        self.register_media(owner, chat_id, paths)
+        return True
+
     def chat_ids_for_owner(self, owner: object) -> tuple[str, ...]:
         return tuple(self._owner_chat_ids.get(owner, ()))
 

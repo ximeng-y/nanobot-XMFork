@@ -106,6 +106,44 @@ describe("canonical thread event projection", () => {
     }]);
   });
 
+  it("keeps deleted stream_end media when creating and updating an answer", () => {
+    const media = [{
+      kind: "image" as const,
+      name: "removed.png",
+      url: "",
+      managed_id: "att-1",
+      deleted: true,
+    }];
+    const created = projectThreadEvents([{
+      event: "stream_end",
+      chat_id: "chat",
+      turn_id: "turn-create",
+      turn_seq: 2,
+      text: "Chart",
+      media_urls: media,
+    }]);
+    expect(created[0]).toMatchObject({ content: "Chart", media });
+
+    const updated = projectThreadEvents([
+      {
+        event: "delta",
+        chat_id: "chat",
+        turn_id: "turn-update",
+        turn_seq: 1,
+        text: "Chart",
+      },
+      {
+        event: "stream_end",
+        chat_id: "chat",
+        turn_id: "turn-update",
+        turn_seq: 2,
+        text: "Chart",
+        media_urls: media,
+      },
+    ]);
+    expect(updated[0]).toMatchObject({ content: "Chart", media });
+  });
+
   it("routes late snapshots by stream without moving same-text answers or stealing the active cursor", () => {
     let state = createThreadProjectionState();
     const index = new ThreadProjectionIndex();

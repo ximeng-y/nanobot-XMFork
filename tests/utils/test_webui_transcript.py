@@ -234,7 +234,16 @@ def test_event_projection_augments_complete_stream_text(history, tmp_path, monke
 
     payload = history.build(
         key,
-        augment_assistant_text=lambda text: text.replace("output.png", "/api/media/signed"),
+        augment_assistant_text=lambda text: {
+            "text": text.replace("output.png", "/api/media/signed"),
+            "media": [{
+                "kind": "image",
+                "name": "output.png",
+                "managed_id": "att-output",
+                "deleted": True,
+                "url": "",
+            }],
+        },
     )
 
     assert payload is not None
@@ -242,6 +251,51 @@ def test_event_projection_augments_complete_stream_text(history, tmp_path, monke
         "![plot](output.png)",
         "![plot](/api/media/signed)",
     ]
+    assert "media_urls" not in payload["events"][0]
+    assert payload["events"][1]["media_urls"] == [{
+        "kind": "image",
+        "name": "output.png",
+        "managed_id": "att-output",
+        "deleted": True,
+        "url": "",
+    }]
+
+
+def test_deleted_text_projection_overrides_available_explicit_media(history) -> None:
+    key = "websocket:deleted-text-overrides-media"
+    history.append(key, {
+        "event": "message",
+        "text": "![plot](local.png)",
+        "media": ["local.png"],
+        "media_urls": [{"url": "/api/media/old", "name": "local.png"}],
+    })
+    payload = history.build(
+        key,
+        augment_assistant_media=lambda _paths: [{
+            "kind": "image",
+            "name": "local.png",
+            "managed_id": "att-local",
+            "url": "/api/media/available",
+        }],
+        augment_assistant_text=lambda _text: {
+            "text": "plot",
+            "media": [{
+                "kind": "image",
+                "name": "local.png",
+                "managed_id": "att-local",
+                "deleted": True,
+                "url": "",
+            }],
+        },
+    )
+    assert payload["events"][0]["text"] == "plot"
+    assert payload["events"][0]["media_urls"] == [{
+        "kind": "image",
+        "name": "local.png",
+        "managed_id": "att-local",
+        "deleted": True,
+        "url": "",
+    }]
 
 
 @pytest.mark.parametrize(
@@ -1229,7 +1283,10 @@ def test_shell_output_format_survives_reload_and_paging_without_loading_model_hi
     def build(**kwargs):
         return reopened.project_history(key, lambda snapshot: transcript_module.build_webui_thread_response(
             key, history=snapshot, session_messages_loader=fail_if_loaded,
-            augment_assistant_text=lambda text: text.replace("local.png", "/api/media/signed"), **kwargs,
+            augment_assistant_text=lambda text: {
+                "text": text.replace("local.png", "/api/media/signed"),
+                "media": [],
+            }, **kwargs,
         ))
 
     latest = build(limit=2, direction="latest")

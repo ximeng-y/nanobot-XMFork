@@ -439,23 +439,53 @@ class WebUIOutboundDelivery:
             chat_id, persisted=persisted, metadata=metadata, phase=phase,
         )
 
-    async def _rewrite_markdown_images(self, text: str, *, session_key: str) -> str:
+    def _temporary_media_context(
+        self,
+        chat_id: str,
+    ) -> tuple[str | None, Callable[[Path], bool] | None]:
+        if self._temporary_chats.should_persist_transcript(chat_id):
+            return None, None
+        return chat_id, lambda path: self._temporary_chats.register_staged_media(
+            chat_id, [str(path)],
+        )
+
+    async def _rewrite_markdown_images(
+        self,
+        text: str,
+        *,
+        session_key: str,
+        temporary_namespace: str | None = None,
+        register_temporary_copy: Callable[[Path], bool] | None = None,
+    ) -> str:
         if "![" not in text:
-            return self._media.rewrite_local_markdown_images(text, session_key=session_key)
+            return self._media.rewrite_local_markdown_images(
+                text,
+                session_key=session_key,
+                temporary_namespace=temporary_namespace,
+                register_temporary_copy=register_temporary_copy,
+            )
         return await asyncio.to_thread(
             self._media.rewrite_local_markdown_images,
             text,
             session_key=session_key,
+            temporary_namespace=temporary_namespace,
+            register_temporary_copy=register_temporary_copy,
         )
 
     async def _message_payload(self, msg: OutboundMessage, progress: ProgressEvent | None) -> dict[str, Any]:
         text = msg.content
         user_shell = msg.metadata.get(INBOUND_META_USER_SHELL) is True
         session_key = webui_session_key(msg.chat_id)
+        temporary_namespace, register_temporary_copy = self._temporary_media_context(
+            msg.chat_id,
+        )
         payload: MessageWirePayload = {
             "event": "message", "chat_id": msg.chat_id,
             "text": text if user_shell else await self._rewrite_markdown_images(
-                text, session_key=session_key,
+                text,
+                session_key=session_key,
+                temporary_namespace=temporary_namespace,
+                register_temporary_copy=register_temporary_copy,
             ),
         }
         if user_shell:
@@ -473,6 +503,8 @@ class WebUIOutboundDelivery:
                     self._media.sign_or_stage_media_path,
                     Path(entry),
                     session_key=session_key,
+                    temporary_namespace=temporary_namespace,
+                    register_temporary_copy=register_temporary_copy,
                 )
                 if signed is not None:
                     urls.append(signed)
@@ -577,8 +609,14 @@ class WebUIOutboundDelivery:
             if delta:
                 buffered.chunks.append(delta)
             full_text = "".join(buffered.chunks)
+            temporary_namespace, register_temporary_copy = self._temporary_media_context(
+                chat_id,
+            )
             rewritten = await self._rewrite_markdown_images(
-                full_text, session_key=webui_session_key(chat_id),
+                full_text,
+                session_key=webui_session_key(chat_id),
+                temporary_namespace=temporary_namespace,
+                register_temporary_copy=register_temporary_copy,
             )
             completed_text = rewritten
             if delta or rewritten != full_text:

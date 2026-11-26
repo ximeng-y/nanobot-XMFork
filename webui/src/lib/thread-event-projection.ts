@@ -1004,6 +1004,7 @@ function reduceThreadEvent(
 
   if (event.event === "stream_end") {
     if (state.suppressUntilTurnEnd) return state;
+    const media = event.media_urls?.map((item) => toMediaAttachment(item));
     const turn = turnFieldsForProjection(state, event, "answer");
     const mergeNext = event.resuming === true && event.merge_next === true;
     const streamKey = answerStreamKey(turn, event.stream_id);
@@ -1050,11 +1051,12 @@ function reduceThreadEvent(
         ...(event.source ? { source: event.source } : {}),
         ...(event.response_sources !== undefined ? { responseSources: event.response_sources } : {}),
         ...(event.response_input_ids !== undefined ? { responseInputIds: event.response_input_ids } : {}),
+        ...(media?.length ? { media } : {}),
         createdAt: projectionCreatedAt(event, options),
       }];
       options.effects?.bodyWrites.add(id);
       targetIndex = state.messages.length - 1;
-    } else if (targetIndex !== null && (typeof text === "string" || event.source
+    } else if (targetIndex !== null && (typeof text === "string" || media?.length || event.source
       || event.response_sources !== undefined || event.response_input_ids !== undefined)) {
       const target = state.messages[targetIndex];
       state.messages = replaceMessageAt(state.messages, targetIndex, {
@@ -1065,6 +1067,7 @@ function reduceThreadEvent(
         ...(event.source ? { source: event.source } : {}),
         ...(event.response_sources !== undefined ? { responseSources: event.response_sources } : {}),
         ...(event.response_input_ids !== undefined ? { responseInputIds: event.response_input_ids } : {}),
+        ...(media?.length ? { media } : {}),
       });
       if (typeof text === "string") options.effects?.bodyWrites.add(target.id);
     }

@@ -253,6 +253,30 @@ describe("webui API helpers", () => {
     })).toThrow("Invalid WebUI thread projection event: message");
   });
 
+  it("accepts deleted managed media on stream_end", () => {
+    const deletedMedia = {
+      kind: "image",
+      name: "removed.png",
+      managed_id: "att-1",
+      deleted: true,
+      url: "",
+    };
+    expect(parseWebuiThreadPayload({
+      schemaVersion: 3,
+      projection: "events",
+      events: [{
+        event: "stream_end",
+        chat_id: "chat-1",
+        text: "Chart",
+        turn_id: "turn-1",
+        turn_seq: 2,
+        media_urls: [deletedMedia],
+      }],
+    })).toMatchObject({
+      events: [{ event: "stream_end", media_urls: [deletedMedia] }],
+    });
+  });
+
   it.each([
     {},
     { stream_id: "answer-1" },

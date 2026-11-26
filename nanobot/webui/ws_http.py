@@ -956,7 +956,7 @@ class GatewayHTTPHandler:
             augment_assistant_media=lambda paths: self.media.augment_transcript_media(
                 paths, session_key=session_key,
             ),
-            augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
+            augment_assistant_text=lambda text: self.media.augment_transcript_assistant_text(
                 text,
                 workspace_path=scope.project_path,
                 session_key=session_key,
@@ -1264,7 +1264,7 @@ class GatewayHTTPHandler:
             augment_assistant_media=lambda paths: self.media.augment_transcript_media(
                 paths, session_key=decoded_key,
             ),
-            augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
+            augment_assistant_text=lambda text: self.media.augment_transcript_assistant_text(
                 text,
                 workspace_path=scope.project_path,
                 session_key=decoded_key,

@@ -142,6 +142,7 @@ class MessageWirePayload(_ChatWirePayload):
 class StreamWirePayload(_ChatWirePayload):
     event: Literal["delta", "stream_end", "reasoning_delta", "reasoning_end"]
     text: NotRequired[str]
+    media_urls: NotRequired[list[dict[str, Any]]]
     stream_id: NotRequired[str]
     resuming: NotRequired[bool]
     merge_next: NotRequired[bool]

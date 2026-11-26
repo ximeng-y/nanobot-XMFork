@@ -394,6 +394,15 @@ function parseThreadProjectionEvent(value: unknown, validatedGraphs: ReadonlySet
       if (typeof value.text !== "string") break;
       return value as unknown as ThreadProjectionEvent;
     case "stream_end":
+      if (value.text !== undefined && typeof value.text !== "string") break;
+      if (value.media_urls !== undefined && (
+        !Array.isArray(value.media_urls) || !value.media_urls.every(isProjectionMedia)
+      )) break;
+      if (value.text_from_seq !== undefined && (
+        !Number.isSafeInteger(value.text_from_seq) || Number(value.text_from_seq) < 0
+        || !Number.isSafeInteger(value.turn_seq) || Number(value.text_from_seq) > Number(value.turn_seq)
+      )) break;
+      return value as unknown as ThreadProjectionEvent;
     case "reasoning_end":
       if (value.text !== undefined && typeof value.text !== "string") break;
       if (value.text_from_seq !== undefined && (

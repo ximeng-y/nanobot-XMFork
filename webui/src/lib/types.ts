@@ -1738,6 +1738,13 @@ export type InboundEvent =
       chat_id: string;
       stream_id?: string;
       text?: string;
+      media_urls?: Array<{
+        kind?: UIMediaKind;
+        url?: string;
+        name?: string;
+        managed_id?: string;
+        deleted?: boolean;
+      }>;
       /** Inclusive first turn sequence covered by this stream's cumulative text. */
       text_from_seq?: number;
       /** Lightweight provenance for proactive streamed assistant messages. */

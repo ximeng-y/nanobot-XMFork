@@ -642,9 +642,24 @@ def test_cached_inline_trace_uses_message_augmentation(history):
 
     result = history.build(
         key,
-        augment_assistant_text=lambda text: f"augmented:{text}",
+        augment_assistant_text=lambda text: {
+            "text": f"augmented:{text}",
+            "media": [{
+                "kind": "image",
+                "name": "private.png",
+                "managed_id": "att-private",
+                "deleted": True,
+                "url": "",
+            }],
+        },
         augment_assistant_media=lambda _paths: [],
     )
     progress = [event for event in result["events"] if event.get("kind") == "progress"]
     assert [event["text"] for event in progress] == ["augmented:", "plain text"]
-    assert "media_urls" not in progress[0]
+    assert progress[0]["media_urls"] == [{
+        "kind": "image",
+        "name": "private.png",
+        "managed_id": "att-private",
+        "deleted": True,
+        "url": "",
+    }]

@@ -118,6 +118,11 @@ _SESSION_MENTION_NAME_RE = re.compile(r"^[\w-]+$")
 _SESSION_HANDLE_ID_RE = re.compile(r"^handle_[0-9a-f]{32}$")
 
 
+class AssistantTextProjection(TypedDict):
+    text: str
+    media: list[dict[str, Any]]
+
+
 def _response_sources(value: object) -> list[dict[str, str | bool]]:
     if not isinstance(value, list):
         return []
@@ -194,6 +199,60 @@ def rewrite_local_markdown_images(
         return f"![{match.group(1)}]({signed_url}{title})"
 
     return _MARKDOWN_LOCAL_IMAGE_RE.sub(replace, text)
+
+
+def project_history_markdown_media(
+    text: str,
+    *,
+    workspace_path: Path,
+    resolve_reference: Callable[
+        [str], tuple[str | None, dict[str, Any] | None],
+    ],
+) -> AssistantTextProjection:
+    """投影历史 Markdown 图片，并保留已删除托管媒体的占位信息。"""
+    if "![" not in text:
+        return {"text": text, "media": []}
+    workspace_root = workspace_path.resolve(strict=False)
+    media: list[dict[str, Any]] = []
+
+    def resolve_reference_text(raw_url: str) -> str | None:
+        url = raw_url.strip()
+        if url.startswith("<") and url.endswith(">"):
+            url = url[1:-1].strip()
+        if not url:
+            return None
+        if url.startswith("/api/media/"):
+            return url
+        parsed = urlparse(url)
+        if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+            return None
+        path_text = unquote(url)
+        if Path(path_text).suffix.lower() not in _INLINE_MARKDOWN_MEDIA_EXTS:
+            return None
+        candidate = Path(path_text).expanduser()
+        if not candidate.is_absolute():
+            candidate = workspace_root / candidate
+        try:
+            resolved = candidate.resolve(strict=False)
+            resolved.relative_to(workspace_root)
+        except (OSError, ValueError):
+            return None
+        return str(resolved)
+
+    def replace(match: re.Match[str]) -> str:
+        resolved = resolve_reference_text(match.group(2))
+        if resolved is None:
+            return match.group(0)
+        replacement_url, deleted_media = resolve_reference(resolved)
+        if deleted_media is not None:
+            media.append(deleted_media)
+            return match.group(1).strip()
+        if replacement_url is None:
+            return match.group(0)
+        title = match.group(3) or ""
+        return f"![{match.group(1)}]({replacement_url}{title})"
+
+    return {"text": _MARKDOWN_LOCAL_IMAGE_RE.sub(replace, text), "media": media}
 
 
 def _media_kind_from_name(name: str) -> str:
@@ -1028,26 +1087,79 @@ def _client_projection_source(record: dict[str, Any]) -> dict[str, Any] | None:
     return projected
 
 
+def _projected_media(value: Any) -> list[dict[str, Any]]:
+    media: list[dict[str, Any]] = []
+    for item in cast(list[Any], value) if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        entry = dict(cast(dict[str, Any], item))
+        name = entry.get("name")
+        name_text = name if isinstance(name, str) else ""
+        if "kind" not in entry:
+            entry["kind"] = _media_kind_from_name(name_text)
+        deleted = entry.get("deleted") is True
+        url = entry.get("url")
+        if not isinstance(url, str):
+            url = ""
+        entry["url"] = url
+        if deleted or url:
+            media.append(entry)
+    return media
+
+
+def _merge_projected_media(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    positions: dict[tuple[object, ...], int] = {}
+    for group in groups:
+        for item in group:
+            managed_id = item.get("managed_id")
+            key: tuple[object, ...] = (
+                ("managed_id", managed_id)
+                if isinstance(managed_id, str) and managed_id
+                else ("media", item.get("url"), item.get("name"), item.get("kind"))
+            )
+            position = positions.get(key)
+            if position is None:
+                positions[key] = len(merged)
+                merged.append(item)
+            elif item.get("deleted") is True and merged[position].get("deleted") is not True:
+                merged[position] = item
+    return merged
+
+
 def _augment_projected_message(
     record: dict[str, Any], projected: dict[str, Any], *,
     augment_media: Callable[[list[str]], list[dict[str, Any]]] | None,
-    augment_text: Callable[[str], str] | None,
+    augment_text: Callable[[str], AssistantTextProjection] | None,
     cached: bool = False,
 ) -> None:
-    if augment_text is not None and projected.get("render_as") != "text":
-        projected["text"] = augment_text(projected["text"])
+    text_media: list[dict[str, Any]] = []
+    if (
+        augment_text is not None
+        and projected.get("render_as") != "text"
+        and isinstance(projected.get("text"), str)
+    ):
+        text_projection = augment_text(projected["text"])
+        projected["text"] = text_projection["text"]
+        text_media = text_projection["media"]
+    base_media: list[dict[str, Any]] = []
+    replace_media = False
     if augment_media is not None and isinstance(raw_media := record.get("media"), list):
         paths = [path for path in cast(list[object], raw_media) if isinstance(path, str) and path]
         if paths:
             # When re-signing local paths, do not fall back to stale signed URLs.
-            media = augment_media(paths)
-            if media:
-                projected["media_urls"] = media
-            else:
-                projected.pop("media_urls", None)
-            return
-    if not cached and (media := _media_from_signed_urls(record.get("media_urls"))):
-        projected["media_urls"] = media
+            base_media = augment_media(paths)
+            replace_media = True
+    if not replace_media:
+        base_media = _projected_media(
+            projected.get("media_urls") if cached else record.get("media_urls"),
+        )
+        replace_media = bool(base_media)
+    merged = _merge_projected_media(base_media, text_media)
+    if merged:
+        projected["media_urls"] = merged
+    elif replace_media:
+        projected.pop("media_urls", None)
 
 
 def _client_projection_event(
@@ -1055,7 +1167,7 @@ def _client_projection_event(
     *,
     augment_user_media: Callable[[list[str], list[str]], list[dict[str, Any]]] | None,
     augment_assistant_media: Callable[[list[str]], list[dict[str, Any]]] | None,
-    augment_assistant_text: Callable[[str], str] | None,
+    augment_assistant_text: Callable[[str], AssistantTextProjection] | None,
 ) -> dict[str, Any] | None:
     event = record.get("event")
     common = _client_projection_common_fields(record)
@@ -1111,8 +1223,6 @@ def _client_projection_event(
             projected["stream_id"] = stream_id
         text = record.get("text")
         if isinstance(text, str):
-            if event == "stream_end" and augment_assistant_text is not None:
-                text = augment_assistant_text(text)
             projected["text"] = text
         if event == "stream_end":
             if record.get("resuming") is True:
@@ -1122,6 +1232,12 @@ def _client_projection_event(
             source = _client_projection_source(record)
             if source:
                 projected["source"] = source
+            _augment_projected_message(
+                record,
+                projected,
+                augment_media=augment_assistant_media,
+                augment_text=augment_assistant_text,
+            )
         return projected
 
     if event == "message":
@@ -1249,7 +1365,7 @@ def _client_projection_events(
     *,
     augment_user_media: Callable[[list[str], list[str]], list[dict[str, Any]]] | None,
     augment_assistant_media: Callable[[list[str]], list[dict[str, Any]]] | None,
-    augment_assistant_text: Callable[[str], str] | None,
+    augment_assistant_text: Callable[[str], AssistantTextProjection] | None,
     defer_traces: bool = True,
 ) -> tuple[list[dict[str, Any]], int | None]:
     events: list[dict[str, Any]] = []
@@ -1293,7 +1409,7 @@ def build_session_thread_response(
     latency_ms: int | None = None,
     augment_user_media: Callable[[list[str], list[str]], list[dict[str, Any]]] | None = None,
     augment_assistant_media: Callable[[list[str]], list[dict[str, Any]]] | None = None,
-    augment_assistant_text: Callable[[str], str] | None = None,
+    augment_assistant_text: Callable[[str], AssistantTextProjection] | None = None,
 ) -> dict[str, Any]:
     """Project a Session snapshot without creating a second display transcript."""
     rows: list[dict[str, Any]] = []
@@ -1363,7 +1479,7 @@ def build_webui_thread_response(
     history: HistoryReader,
     augment_user_media: Callable[[list[str], list[str]], list[dict[str, Any]]] | None = None,
     augment_assistant_media: Callable[[list[str]], list[dict[str, Any]]] | None = None,
-    augment_assistant_text: Callable[[str], str] | None = None,
+    augment_assistant_text: Callable[[str], AssistantTextProjection] | None = None,
     session_messages: list[dict[str, Any]] | None = None,
     session_messages_loader: Callable[[], list[dict[str, Any]] | None] | None = None,
     session_version_loader: Callable[[], tuple[str, int] | None] | None = None,

@@ -75,7 +75,7 @@ const group = groups.find(({ id }) => id === params.get("group")) ?? groups[0]!;
 const base = loadCodexCatalog
   ? preset(
       "Review", "openai_codex", "openai-codex/gpt-6.2-sol", "xhigh",
-      ["low", "medium", "high"], { default: false, ultrafast_supported: true }, undefined,
+      ["low", "medium", "high"], { default: false, ultrafast_supported: true }, null,
     )
   : group.id === "oauth" ? (params.has("ultrafast") ? ultrafastCodex : standardCodex) : group.presets[0]!;
 const extraPresets = params.has("many-presets")

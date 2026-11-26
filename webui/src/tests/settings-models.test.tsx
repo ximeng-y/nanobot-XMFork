@@ -2261,6 +2261,10 @@ describe("Settings models", () => {
     expect(screen.getByRole("checkbox", { name: "high" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "extended" })).toBeChecked();
     const defaultEffort = screen.getByRole("combobox", { name: "Default level" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "extended" }));
+    expect(screen.getByRole("checkbox", { name: "extended" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "extended" }));
+    expect(screen.getByRole("checkbox", { name: "extended" })).toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: "high" }));
     expect(defaultEffort).toHaveValue("");
     fireEvent.click(screen.getByRole("checkbox", { name: "high" }));

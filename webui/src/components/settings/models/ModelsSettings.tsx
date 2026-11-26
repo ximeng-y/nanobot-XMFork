@@ -613,6 +613,12 @@ export function ModelsSettings({
           model={form.model}
           savedValues={form.model === selectedPreset?.model && form.provider === selectedPreset.provider
             ? selectedPreset.reasoning_effort_values : undefined}
+          savedAllowedReasoningEfforts={
+            !creating
+              && form.model === selectedPreset?.model
+              && form.provider === selectedPreset.provider
+              ? selectedPreset.allowed_reasoning_efforts : undefined
+          }
           value={form}
           disabled={saving || creatingSaving}
           onSelect={edits.complete}

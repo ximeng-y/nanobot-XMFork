@@ -14,7 +14,7 @@ from nanobot.config.paths import get_media_dir
 from nanobot.security.workspace_access import WorkspaceScope
 from nanobot.webui.media_api import (
     media_attachment_kind,
-    media_path_from_signed_url,
+    media_path_from_history_signed_url,
     serve_signed_media,
     sign_local_attachment,
     sign_media_path,
@@ -115,16 +115,19 @@ class WebUIMediaGateway:
         def resolve_reference(reference: str) -> tuple[str | None, dict[str, Any] | None]:
             signed = reference.startswith("/api/media/")
             if signed:
-                path = media_path_from_signed_url(
-                    reference, secret=self.secret, media_dir=self._media_dir,
+                path = media_path_from_history_signed_url(
+                    reference, media_dir=self._media_dir,
                 )
                 if path is None:
                     return None, None
+                managed = self._history_managed_record(path, session_key)
+                if managed is None:
+                    return reference, None
             else:
                 path = Path(reference)
-            managed = self._managed_record(
-                path, session_key, include_outbound=True,
-            )
+                managed = self._managed_record(
+                    path, session_key, include_outbound=True,
+                )
             if managed is not None and managed.status == "deleted":
                 return None, {
                     "kind": managed.kind,
@@ -134,7 +137,12 @@ class WebUIMediaGateway:
                     "url": "",
                 }
             if signed:
-                return reference, None
+                projected = self._sign_managed_record(managed)
+                return (
+                    str(projected["url"])
+                    if projected is not None and projected.get("url")
+                    else None
+                ), None
             projected = self.sign_or_stage_media_path(
                 path, session_key=session_key,
             )
@@ -265,6 +273,33 @@ class WebUIMediaGateway:
                 path, session_key, include_deleted=True,
             )
         return None
+
+    def _history_managed_record(
+        self,
+        path: Path,
+        session_key: str | None,
+    ) -> AttachmentRecord | None:
+        if self.attachments is None or session_key is None:
+            return None
+        try:
+            records = self.attachments.store.records_for_path(path)
+        except (OSError, ValueError):
+            return None
+        associated = [
+            record for record in records
+            if record.owner_session_key == session_key
+            or any(reference.key == session_key for reference in record.references)
+        ]
+        if not associated:
+            return None
+        return max(
+            associated,
+            key=lambda record: (
+                record.status == "available",
+                record.status != "deleted",
+                record.created_at,
+            ),
+        )
 
     def _sign_managed_record(self, record: AttachmentRecord) -> dict[str, str] | None:
         if self.attachments is None:

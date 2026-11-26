@@ -9,6 +9,8 @@ from urllib.parse import quote
 import aiohttp
 import pytest
 from websockets.asyncio.client import connect
+from websockets.datastructures import Headers
+from websockets.http11 import Request
 
 from nanobot.attachments.runtime import clear_attachment_services
 from nanobot.bus.queue import MessageBus
@@ -17,6 +19,7 @@ from nanobot.config.loader import load_config
 from nanobot.session.display_history import HistoryFact, HistoryKind
 from nanobot.session.manager import Session, SessionManager
 from nanobot.webui.gateway_services import build_gateway_services
+from nanobot.webui.media_api import b64url_encode, media_path_from_history_signed_url
 
 
 @pytest.fixture
@@ -79,6 +82,20 @@ async def _mutation(ws, request_id: str, action: str, payload: dict) -> dict:
         "payload": payload,
     }))
     return await _event(ws, "webui_response")
+
+
+async def _thread_payload(gateway, session_key: str) -> dict:
+    api_token = gateway.tokens.issue_api_token(60)
+    path = f"/api/sessions/{quote(session_key, safe='')}/webui-thread"
+    request = Request(path, Headers([("Authorization", f"Bearer {api_token}")]))
+    response = await gateway.http._dispatch_session_routes(request, path)
+    assert response.status_code == 200
+    return json.loads(response.body)
+
+
+def _signed_media_parts(url: str) -> tuple[str, str]:
+    _, _, _, signature, payload = url.split("/")
+    return signature, payload
 
 
 async def _register_file(channel: WebSocketChannel, name: str = "0123456789ab.bin"):
@@ -402,6 +419,180 @@ async def test_stream_end_with_signed_markdown_projects_deleted_media(
     assert not signed["url"] in event["text"]
 
 
+@pytest.mark.asyncio
+async def test_signed_stream_history_reprojects_after_gateway_restart(
+    attachment_gateway,
+    tmp_path: Path,
+) -> None:
+    channel, _, _ = attachment_gateway
+    gateway = channel.gateway
+    workspace = tmp_path / "workspace"
+    available_source = workspace / "available-chart.png"
+    shared_source = workspace / "shared-chart.png"
+    available_source.write_bytes(b"\x89PNG\r\n\x1a\navailable")
+    shared_source.write_bytes(b"\x89PNG\r\n\x1a\nshared")
+    session_key = "websocket:signed-restart"
+    other_session_key = "websocket:signed-restart-other"
+
+    available_signed = gateway.media.sign_or_stage_media_path(
+        available_source, session_key=session_key,
+    )
+    shared_signed = gateway.media.sign_or_stage_media_path(
+        shared_source, session_key=session_key,
+    )
+    other_shared_signed = gateway.media.sign_or_stage_media_path(
+        shared_source, session_key=other_session_key,
+    )
+    assert available_signed is not None
+    assert shared_signed is not None
+    assert other_shared_signed is not None
+
+    available_record = gateway.attachments.find_outbound_for_source_path(
+        available_source, session_key, include_deleted=True,
+    )
+    shared_record = gateway.attachments.find_outbound_for_source_path(
+        shared_source, session_key, include_deleted=True,
+    )
+    other_shared_record = gateway.attachments.find_outbound_for_source_path(
+        shared_source, other_session_key, include_deleted=True,
+    )
+    assert available_record is not None
+    assert shared_record is not None
+    assert other_shared_record is not None
+
+    markdown = (
+        "restart chart\n\n"
+        f"![available]({available_signed['url']})\n"
+        f"![shared]({shared_signed['url']})"
+    )
+    session = await gateway.session_manager.state.get(session_key)
+    session.metadata["title"] = "signed restart"
+    await gateway.session_manager.state.append_history(
+        session_key,
+        [
+            HistoryFact(HistoryKind.INPUT, {"text": "show restart charts"}),
+            HistoryFact(
+                HistoryKind.ANSWER_SEGMENT,
+                {"text": markdown},
+                turn_id="signed-restart-turn",
+            ),
+            HistoryFact(HistoryKind.COMPLETION, turn_id="signed-restart-turn"),
+        ],
+        expected_generation=session.generation,
+    )
+    other_markdown = f"other chart\n\n![shared]({other_shared_signed['url']})"
+    other_session = await gateway.session_manager.state.get(other_session_key)
+    other_session.metadata["title"] = "signed restart other"
+    await gateway.session_manager.state.append_history(
+        other_session_key,
+        [
+            HistoryFact(HistoryKind.INPUT, {"text": "show other chart"}),
+            HistoryFact(
+                HistoryKind.ANSWER_SEGMENT,
+                {"text": other_markdown},
+                turn_id="signed-restart-other-turn",
+            ),
+            HistoryFact(
+                HistoryKind.COMPLETION, turn_id="signed-restart-other-turn",
+            ),
+        ],
+        expected_generation=other_session.generation,
+    )
+
+    gateway.attachments.delete([shared_record.id])
+    shared_path = gateway.attachments.store.resolve_relative(
+        shared_record.files[0].relative_path,
+    )
+    records_before = {
+        path: [record.id for record in gateway.attachments.store.records_for_path(path)]
+        for path in (
+            gateway.attachments.store.resolve_relative(
+                available_record.files[0].relative_path,
+            ),
+            shared_path,
+        )
+    }
+    media_root = gateway.attachments.data_dir / "media"
+    files_before = sorted(
+        str(path.relative_to(media_root))
+        for path in media_root.rglob("*")
+        if path.is_file()
+    )
+    assert shared_path.exists()
+
+    clear_attachment_services()
+    restarted = build_gateway_services(
+        config=WebSocketConfig(
+            port=0,
+            path="/ws",
+            token="gateway-secret",
+            max_message_bytes=1024 * 1024,
+        ),
+        bus=MessageBus(),
+        session_manager=gateway.session_manager,
+        static_dist_path=None,
+        workspace_path=workspace,
+        default_restrict_to_workspace=True,
+        runtime_model_name=None,
+        runtime_surface="browser",
+        runtime_capabilities_overrides=None,
+        config_path=tmp_path / "config.json",
+    )
+    assert restarted.media.secret != gateway.media.secret
+
+    payload = await _thread_payload(restarted, session_key)
+    event = next(
+        event for event in payload["events"]
+        if event.get("event") == "stream_end" and "restart chart" in event.get("text", "")
+    )
+    assert available_signed["url"] not in event["text"]
+    assert shared_signed["url"] not in event["text"]
+    assert "![available](" in event["text"]
+    assert "shared" in event["text"]
+    assert event["media_urls"] == [{
+        "kind": "image",
+        "name": "shared-chart.png",
+        "managed_id": shared_record.id,
+        "deleted": True,
+        "url": "",
+    }]
+    current_url = event["text"].split("![available](", 1)[1].split(")", 1)[0]
+    assert current_url != available_signed["url"]
+    assert restarted.media.serve_signed_media(
+        *_signed_media_parts(current_url),
+    ).status_code == 200
+    assert restarted.media.serve_signed_media(
+        *_signed_media_parts(available_signed["url"]),
+    ).status_code == 401
+    assert restarted.media.serve_signed_media(
+        *_signed_media_parts(shared_signed["url"]),
+    ).status_code == 401
+
+    other_payload = await _thread_payload(restarted, other_session_key)
+    other_event = next(
+        event for event in other_payload["events"]
+        if event.get("event") == "stream_end" and "other chart" in event.get("text", "")
+    )
+    assert other_shared_signed["url"] not in other_event["text"]
+    assert "![shared](" in other_event["text"]
+    assert "media_urls" not in other_event
+    other_current_url = other_event["text"].split("![shared](", 1)[1].split(")", 1)[0]
+    assert restarted.media.serve_signed_media(
+        *_signed_media_parts(other_current_url),
+    ).status_code == 200
+
+    assert {
+        path: [record.id for record in restarted.attachments.store.records_for_path(path)]
+        for path in records_before
+    } == records_before
+    files_after = sorted(
+        str(path.relative_to(media_root))
+        for path in media_root.rglob("*")
+        if path.is_file()
+    )
+    assert files_after == files_before
+
+
 async def test_deleted_markdown_media_keeps_other_session_reference(
     attachment_gateway,
     tmp_path: Path,
@@ -471,6 +662,30 @@ async def test_deleted_markdown_media_keeps_other_session_reference(
     assert "/api/media/" in second_event["text"]
     assert "media_urls" not in second_event
     assert source.exists()
+
+
+def test_history_signed_media_path_only_returns_media_relative_candidates(
+    tmp_path: Path,
+) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    valid_payload = b64url_encode(b"websocket/chart.png")
+    valid_url = f"/api/media/old-signature/{valid_payload}"
+    assert media_path_from_history_signed_url(
+        valid_url, media_dir=lambda _channel: media_root,
+    ) == (media_root / "websocket" / "chart.png").resolve()
+
+    outside = tmp_path / "outside.png"
+    invalid_payloads = (
+        str(outside),
+        "../outside.png",
+        "\0" + json.dumps(["websocket:session", str(outside)]),
+    )
+    for payload_text in invalid_payloads:
+        url = f"/api/media/old-signature/{b64url_encode(payload_text.encode())}"
+        assert media_path_from_history_signed_url(
+            url, media_dir=lambda _channel: media_root,
+        ) is None
 
 
 async def test_attachment_mutations_use_contract_and_reject_unknown_ids(

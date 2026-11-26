@@ -127,29 +127,19 @@ def sign_local_attachment(path: str, *, session_key: str, secret: bytes) -> str:
     return f"/api/media/{b64url_encode(mac)}/{payload}"
 
 
-def media_path_from_signed_url(
+def media_path_from_history_signed_url(
     url: str,
     *,
-    secret: bytes,
     media_dir: MediaDirProvider = _default_media_dir,
 ) -> Path | None:
-    """把受限媒体 URL 还原为 media 根内的路径；借用路径不在这里解析。"""
+    """把历史中的受限媒体 URL 还原为 media 根内的候选路径。"""
     parsed = urlparse(url)
     if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
         return None
     parts = parsed.path.strip("/").split("/")
     if len(parts) != 4 or parts[:2] != ["api", "media"]:
         return None
-    sig_text, payload_text = parts[2:]
-    try:
-        provided_mac = b64url_decode(sig_text)
-    except (ValueError, binascii.Error):
-        return None
-    expected_mac = hmac.new(
-        secret, payload_text.encode("ascii"), hashlib.sha256,
-    ).digest()[:16]
-    if not hmac.compare_digest(expected_mac, provided_mac):
-        return None
+    _, payload_text = parts[2:]
     try:
         relative_text = b64url_decode(payload_text).decode("utf-8")
     except (ValueError, binascii.Error, UnicodeDecodeError):

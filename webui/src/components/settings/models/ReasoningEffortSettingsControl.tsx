@@ -19,7 +19,7 @@ export function ReasoningEffortSettingsControl({
   provider,
   model,
   savedValues,
-  savedAllowedReasoningEfforts,
+  savedCandidates,
   value,
   disabled,
   onSelect,
@@ -29,7 +29,7 @@ export function ReasoningEffortSettingsControl({
   provider: SettingsPayload["providers"][number] | undefined;
   model: string;
   savedValues?: string[];
-  savedAllowedReasoningEfforts?: string[] | null;
+  savedCandidates?: string[];
   value: ReasoningEffortSettingsDraft;
   disabled?: boolean;
   onSelect?: () => void;
@@ -46,13 +46,10 @@ export function ReasoningEffortSettingsControl({
     provider: provider?.name ?? "",
     enabled: canLoadCatalog,
   });
-  const savedExtras = savedAllowedReasoningEfforts
-    ?.filter((effort) => !FIXED_EFFORTS.includes(effort)) ?? [];
-  const draftExtras = allowed?.filter((effort) => !FIXED_EFFORTS.includes(effort)) ?? [];
   const efforts = orderReasoningEfforts([
     ...FIXED_EFFORTS,
-    ...savedExtras,
-    ...draftExtras,
+    ...(savedCandidates ?? []),
+    ...(allowed ?? []),
     ...reasoningEffortValues(payload, model, savedValues),
   ]);
   const effortLabel = (effort: string) => effort === "none"

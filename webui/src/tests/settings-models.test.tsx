@@ -2233,6 +2233,35 @@ describe("Settings models", () => {
     ));
   });
 
+  it("keeps a legacy custom reasoning default available after unchecking it in manual mode", async () => {
+    const payload = settingsPayload();
+    Object.assign(payload.model_presets[0], {
+      provider: "openai",
+      reasoning_effort: "extended",
+      reasoning_effort_values: ["", "low", "medium", "high"],
+      allowed_reasoning_efforts: null,
+    });
+    payload.providers = [{
+      name: "openai", label: "OpenAI", configured: true, model_catalog: "unsupported",
+    }];
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(payload)));
+    renderSettingsView({ initialSection: "models", initialSettings: payload });
+    await togglePresetEditor();
+
+    const manual = screen.getByRole("switch", { name: "Manual" });
+    expect(manual).not.toBeChecked();
+    fireEvent.click(manual);
+    const defaultEffort = screen.getByRole("combobox", { name: "Default level" });
+    expect(defaultEffort).toHaveValue("extended");
+    expect(screen.getByRole("checkbox", { name: "extended" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "extended" }));
+    expect(defaultEffort).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "extended" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "extended" }));
+    expect(screen.getByRole("checkbox", { name: "extended" })).toBeChecked();
+  });
+
   it("saves manually selected reasoning levels and their default", async () => {
     const payload = settingsPayload();
     payload.model_presets[0].provider = "openai";

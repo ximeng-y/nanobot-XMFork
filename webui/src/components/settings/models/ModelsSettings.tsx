@@ -339,6 +339,10 @@ export function ModelsSettings({
 
   const configuredProviders = settings.providers.filter((provider) => provider.configured);
   const selectedProvider = settings.providers.find((provider) => provider.name === form.provider);
+  const savedReasoningPreset = !creating
+    && form.model === selectedPreset?.model
+    && form.provider === selectedPreset.provider
+    ? selectedPreset : null;
   const savedSpeed = form.provider === selectedPreset?.provider && form.model === selectedPreset.model
     ? selectedPreset.model_options?.codex_fast_mode : undefined;
   const speedProvider = selectedProvider ?? (savedSpeed
@@ -611,14 +615,11 @@ export function ModelsSettings({
           token={token}
           provider={selectedProvider ?? settings.providers.find((provider) => provider.name === selectedPreset?.resolved_provider)}
           model={form.model}
-          savedValues={form.model === selectedPreset?.model && form.provider === selectedPreset.provider
-            ? selectedPreset.reasoning_effort_values : undefined}
-          savedAllowedReasoningEfforts={
-            !creating
-              && form.model === selectedPreset?.model
-              && form.provider === selectedPreset.provider
-              ? selectedPreset.allowed_reasoning_efforts : undefined
-          }
+          savedValues={savedReasoningPreset?.reasoning_effort_values}
+          savedCandidates={savedReasoningPreset ? [
+            ...(savedReasoningPreset.allowed_reasoning_efforts ?? []),
+            ...(savedReasoningPreset.reasoning_effort ? [savedReasoningPreset.reasoning_effort] : []),
+          ] : undefined}
           value={form}
           disabled={saving || creatingSaving}
           onSelect={edits.complete}

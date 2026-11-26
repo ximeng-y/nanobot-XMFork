@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from nanobot.attachments.store import AttachmentCapacityError
 from nanobot.agent.tools.base import Tool, ToolResult, tool_parameters
+from nanobot.agent.tools.context import current_request_session_key
 from nanobot.agent.tools.image_generation_config import ImageGenerationToolConfig
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.schema import (
@@ -16,9 +16,9 @@ from nanobot.agent.tools.schema import (
     StringSchema,
     tool_parameters_schema,
 )
+from nanobot.attachments.store import AttachmentCapacityError
 from nanobot.config.network import NetworkConfig
 from nanobot.config.paths import get_media_dir
-from nanobot.agent.tools.context import current_request_session_key
 from nanobot.providers.image_generation import (
     ImageGenerationError,
     ImageGenerationProvider,
@@ -35,8 +35,8 @@ from nanobot.utils.artifacts import (
 from nanobot.utils.helpers import detect_image_mime
 
 if TYPE_CHECKING:
-    from nanobot.attachments.service import AttachmentService
     from nanobot.agent.tools.context import ToolContext
+    from nanobot.attachments.service import AttachmentService
     from nanobot.config.schema import Config, ProviderConfig
 
 

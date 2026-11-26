@@ -12,28 +12,26 @@ import threading
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, cast
 
 from nanobot.attachments.references import (
     AttachmentReferenceScan,
-    SessionAttachmentReferences,
     scan_session_references,
 )
 from nanobot.attachments.store import (
-    AttachmentCapacityError,
     AttachmentDeletePreview,
     AttachmentDeleteResult,
     AttachmentFileSpec,
-    AttachmentReference,
     AttachmentRecord,
+    AttachmentReference,
     AttachmentStore,
     AttachmentUsage,
     CapacityReservation,
 )
 from nanobot.utils.atomic_file import atomic_write_text, io_path
-from nanobot.utils.helpers import detect_image_mime, safe_filename
+from nanobot.utils.helpers import detect_image_mime
 
 _UPLOAD_NAME = re.compile(r"^[0-9a-f]{12}(?:_[^/]*)?(?:\.[^/]+)$")
 _OUTBOUND_NAME = re.compile(r"^([0-9a-f]{20})-.+")

@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from nanobot.config.network import NetworkConfig
 
 if TYPE_CHECKING:
-    from nanobot.attachments.service import AttachmentService
     from nanobot.agent.subagent import SubagentManager
     from nanobot.agent.tools.exec_session import ExecSessionManager
     from nanobot.agent.tools.file_state import FileStates
     from nanobot.agent.tools.runtime_control import RuntimeControl
+    from nanobot.attachments.service import AttachmentService
     from nanobot.bus.queue import MessageBus
     from nanobot.config.schema import ProvidersConfig, ToolsConfig
     from nanobot.cron.service import CronService

@@ -14,11 +14,8 @@ from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from nanobot.attachments.store import (
-    AttachmentCapacityError,
-    AttachmentStore as ManagedAttachmentStore,
-    CapacityReservation,
-)
+from nanobot.attachments.store import AttachmentCapacityError, CapacityReservation
+from nanobot.attachments.store import AttachmentStore as ManagedAttachmentStore
 from nanobot.channels.websocket.attachment_policy import (
     DOCUMENT_MIME_ALLOWED,
     MAX_VIDEOS_PER_MESSAGE,

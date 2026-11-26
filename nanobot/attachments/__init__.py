@@ -4,8 +4,8 @@ from nanobot.attachments.config import AttachmentStorageConfig
 from nanobot.attachments.service import AttachmentPolicy, AttachmentService
 from nanobot.attachments.store import (
     AttachmentCapacityError,
-    AttachmentDeleteResult,
     AttachmentDeletePreview,
+    AttachmentDeleteResult,
     AttachmentFile,
     AttachmentRecord,
     AttachmentReference,

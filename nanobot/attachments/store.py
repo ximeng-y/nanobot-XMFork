@@ -910,7 +910,7 @@ class AttachmentStore:
                 )
             finally:
                 connection.close()
-            with _suppress_os_error():
+            with _SuppressOSError():
                 os.chmod(self.db_path, 0o600)
 
     def _connect(self) -> sqlite3.Connection:
@@ -1256,7 +1256,7 @@ def _merged_references(references: Iterable[AttachmentReference]) -> tuple[Attac
     return tuple(by_key[key] for key in sorted(by_key))
 
 
-class _suppress_os_error:
+class _SuppressOSError:
     def __enter__(self) -> None:
         return None
 

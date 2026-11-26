@@ -285,15 +285,27 @@ class WebUIMediaGateway:
             records = self.attachments.store.records_for_path(path)
         except (OSError, ValueError):
             return None
-        associated = [
+        owned = [
             record for record in records
             if record.owner_session_key == session_key
-            or any(reference.key == session_key for reference in record.references)
         ]
-        if not associated:
+        if owned:
+            return max(
+                owned,
+                key=lambda record: (
+                    record.status == "available",
+                    record.status != "deleted",
+                    record.created_at,
+                ),
+            )
+        referenced = [
+            record for record in records
+            if any(reference.key == session_key for reference in record.references)
+        ]
+        if not referenced:
             return None
         return max(
-            associated,
+            referenced,
             key=lambda record: (
                 record.status == "available",
                 record.status != "deleted",

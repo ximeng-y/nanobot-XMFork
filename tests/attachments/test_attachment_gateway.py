@@ -416,7 +416,7 @@ async def test_stream_end_with_signed_markdown_projects_deleted_media(
         "url": "",
     }]
     assert source.exists()
-    assert not signed["url"] in event["text"]
+    assert signed["url"] not in event["text"]
 
 
 @pytest.mark.asyncio
@@ -463,7 +463,8 @@ async def test_signed_stream_history_reprojects_after_gateway_restart(
     markdown = (
         "restart chart\n\n"
         f"![available]({available_signed['url']})\n"
-        f"![shared]({shared_signed['url']})"
+        "![shared-relative](shared-chart.png)\n"
+        f"![shared-signed]({shared_signed['url']})"
     )
     session = await gateway.session_manager.state.get(session_key)
     session.metadata["title"] = "signed restart"
@@ -499,6 +500,12 @@ async def test_signed_stream_history_reprojects_after_gateway_restart(
         expected_generation=other_session.generation,
     )
 
+    reconciled = gateway.attachments.reconcile()
+    assert reconciled.complete
+    reconciled_other_record = gateway.attachments.store.get(other_shared_record.id)
+    assert session_key in {
+        reference.key for reference in reconciled_other_record.references
+    }
     gateway.attachments.delete([shared_record.id])
     shared_path = gateway.attachments.store.resolve_relative(
         shared_record.files[0].relative_path,
@@ -548,7 +555,10 @@ async def test_signed_stream_history_reprojects_after_gateway_restart(
     assert available_signed["url"] not in event["text"]
     assert shared_signed["url"] not in event["text"]
     assert "![available](" in event["text"]
-    assert "shared" in event["text"]
+    assert "shared-relative" in event["text"]
+    assert "shared-signed" in event["text"]
+    assert "![shared-relative](" not in event["text"]
+    assert "![shared-signed](" not in event["text"]
     assert event["media_urls"] == [{
         "kind": "image",
         "name": "shared-chart.png",
@@ -580,6 +590,9 @@ async def test_signed_stream_history_reprojects_after_gateway_restart(
     assert restarted.media.serve_signed_media(
         *_signed_media_parts(other_current_url),
     ).status_code == 200
+    assert restarted.media.serve_signed_media(
+        *_signed_media_parts(other_shared_signed["url"]),
+    ).status_code == 401
 
     assert {
         path: [record.id for record in restarted.attachments.store.records_for_path(path)]

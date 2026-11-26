@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
+from urllib.parse import unquote
 
 _IMAGE_ID = re.compile(r"[0-9a-f]{64}")
 _MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\(\s*(?:<([^>]+)>|([^)\s]+))")
@@ -64,13 +65,27 @@ def scan_session_references(
             continue
         scanned = _scan_database(
             database,
+            namespace=namespace,
             borrowed=result.borrowed_paths,
             data_dir=data_dir,
         )
         if scanned is None:
             result.complete = False
             continue
-        result.sessions.update(scanned)
+        sessions, complete = scanned
+        if not complete:
+            result.complete = False
+        for key, incoming in sessions.items():
+            existing = result.sessions.get(key)
+            if existing is None:
+                result.sessions[key] = incoming
+                continue
+            result.sessions[key] = SessionAttachmentReferences(
+                key=key,
+                title=existing.title,
+                paths=existing.paths | incoming.paths,
+                managed_ids=existing.managed_ids | incoming.managed_ids,
+            )
     return result
 
 
@@ -78,6 +93,8 @@ def references_from_record(
     record: object,
     *,
     data_dir: Path | None = None,
+    workspace: Path | None = None,
+    unresolved: set[str] | None = None,
 ) -> tuple[set[str], set[str], set[str]]:
     """从明确媒体字段提取路径、托管 ID 和借用原路径。"""
     paths: set[str] = set()
@@ -89,6 +106,8 @@ def references_from_record(
         managed_ids=managed_ids,
         borrowed=borrowed,
         data_dir=data_dir,
+        workspace=workspace,
+        unresolved=unresolved,
     )
     return paths, managed_ids, borrowed
 
@@ -96,9 +115,10 @@ def references_from_record(
 def _scan_database(
     database: Path,
     *,
+    namespace: Path,
     borrowed: set[str],
     data_dir: Path | None,
-) -> dict[str, SessionAttachmentReferences] | None:
+) -> tuple[dict[str, SessionAttachmentReferences], bool] | None:
     uri = database.resolve(strict=True).as_uri() + "?mode=ro"
     connection: sqlite3.Connection | None = None
     try:
@@ -106,11 +126,15 @@ def _scan_database(
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("BEGIN")
+        namespace_workspace = _namespace_workspace(namespace)
+        unresolved: set[str] = set()
         sessions: dict[str, SessionAttachmentReferences] = {}
         rows = connection.execute("SELECT key, metadata FROM sessions").fetchall()
         for row in rows:
             key = str(row["key"])
-            title = _session_title(key, _json_object(row["metadata"]))
+            metadata = _json_object(row["metadata"])
+            title = _session_title(key, metadata)
+            workspace = _session_workspace(metadata, namespace_workspace)
             paths: set[str] = set()
             managed_ids: set[str] = set()
             for sql in (
@@ -129,7 +153,10 @@ def _scan_database(
                         continue
                     parsed = _json_value(raw)
                     found_paths, found_ids, found_borrowed = references_from_record(
-                        parsed, data_dir=data_dir,
+                        parsed,
+                        data_dir=data_dir,
+                        workspace=workspace,
+                        unresolved=unresolved,
                     )
                     paths.update(found_paths)
                     managed_ids.update(found_ids)
@@ -141,7 +168,7 @@ def _scan_database(
                 managed_ids=frozenset(managed_ids),
             )
         connection.rollback()
-        return sessions
+        return sessions, not unresolved
     except (OSError, sqlite3.Error):
         return None
     finally:
@@ -161,16 +188,28 @@ def _walk_value(
     managed_ids: set[str],
     borrowed: set[str],
     data_dir: Path | None,
+    workspace: Path | None,
+    unresolved: set[str] | None,
 ) -> None:
     if isinstance(value, dict):
         data = cast(dict[object, object], value)
         local_media = data.get("local_media_paths")
         if isinstance(local_media, list):
-            borrowed.update(item for item in local_media if isinstance(item, str) and item)
+            for item in local_media:
+                if not isinstance(item, str) or not item:
+                    continue
+                resolved = _resolve_path(item, workspace=workspace, unresolved=unresolved)
+                if resolved is not None:
+                    borrowed.add(resolved)
         for key in ("media", "media_paths"):
             item = data.get(key)
             if isinstance(item, list):
-                paths.update(path for path in item if isinstance(path, str) and path)
+                for path in item:
+                    if not isinstance(path, str) or not path:
+                        continue
+                    resolved = _resolve_path(path, workspace=workspace, unresolved=unresolved)
+                    if resolved is not None:
+                        paths.add(resolved)
         for key in ("managed_id", "source_managed_id"):
             item = data.get(key)
             if isinstance(item, str) and item:
@@ -194,14 +233,26 @@ def _walk_value(
                 artifact_data = cast(dict[object, object], artifact)
                 path = artifact_data.get("path")
                 if isinstance(path, str) and path:
-                    paths.add(path)
+                    resolved = _resolve_path(path, workspace=workspace, unresolved=unresolved)
+                    if resolved is not None:
+                        paths.add(resolved)
                 metadata_path = artifact_data.get("metadata_path")
                 if isinstance(metadata_path, str) and metadata_path:
-                    paths.add(metadata_path)
+                    resolved = _resolve_path(
+                        metadata_path,
+                        workspace=workspace,
+                        unresolved=unresolved,
+                    )
+                    if resolved is not None:
+                        paths.add(resolved)
         for key in ("content", "text"):
             item = data.get(key)
             if isinstance(item, str):
-                paths.update(_markdown_paths(item))
+                paths.update(_markdown_paths(
+                    item,
+                    workspace=workspace,
+                    unresolved=unresolved,
+                ))
                 parsed = _json_value(item) if item.lstrip().startswith("{") else None
                 if isinstance(parsed, dict):
                     _walk_value(
@@ -210,6 +261,8 @@ def _walk_value(
                         managed_ids=managed_ids,
                         borrowed=borrowed,
                         data_dir=data_dir,
+                        workspace=workspace,
+                        unresolved=unresolved,
                     )
             elif isinstance(item, (dict, list)):
                 _walk_value(
@@ -218,6 +271,8 @@ def _walk_value(
                     managed_ids=managed_ids,
                     borrowed=borrowed,
                     data_dir=data_dir,
+                    workspace=workspace,
+                    unresolved=unresolved,
                 )
         for key, item in data.items():
             if key in {
@@ -232,6 +287,8 @@ def _walk_value(
                     managed_ids=managed_ids,
                     borrowed=borrowed,
                     data_dir=data_dir,
+                    workspace=workspace,
+                    unresolved=unresolved,
                 )
     elif isinstance(value, list):
         for item in value:
@@ -241,17 +298,76 @@ def _walk_value(
                 managed_ids=managed_ids,
                 borrowed=borrowed,
                 data_dir=data_dir,
+                workspace=workspace,
+                unresolved=unresolved,
             )
 
 
-def _markdown_paths(text: str) -> set[str]:
+def _markdown_paths(
+    text: str,
+    *,
+    workspace: Path | None,
+    unresolved: set[str] | None,
+) -> set[str]:
     paths: set[str] = set()
     for match in _MARKDOWN_IMAGE.finditer(text):
         raw = match.group(1) or match.group(2)
-        if not raw or raw.startswith(("http://", "https://", "data:", "/api/media/")):
+        if not raw or raw.startswith(("http://", "https://", "data:", "/api/media/", "#")):
             continue
-        paths.add(raw)
+        resolved = _resolve_path(
+            unquote(raw),
+            workspace=workspace,
+            unresolved=unresolved,
+        )
+        if resolved is not None:
+            paths.add(resolved)
     return paths
+
+
+def _resolve_path(
+    raw_path: str,
+    *,
+    workspace: Path | None,
+    unresolved: set[str] | None,
+) -> str | None:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        if workspace is None:
+            if unresolved is not None:
+                unresolved.add(raw_path)
+            return None
+        path = workspace / path
+    try:
+        return str(path.resolve(strict=False))
+    except OSError:
+        if unresolved is not None:
+            unresolved.add(raw_path)
+        return None
+
+
+def _namespace_workspace(namespace: Path) -> Path | None:
+    marker = namespace / ".workspace"
+    if marker.is_symlink() or not marker.is_file():
+        return None
+    try:
+        value = marker.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        return None
+    if not value:
+        return None
+    return Path(value).expanduser().resolve(strict=False)
+
+
+def _session_workspace(
+    metadata: dict[str, object],
+    namespace_workspace: Path | None,
+) -> Path | None:
+    scope = metadata.get("workspace_scope")
+    if isinstance(scope, dict):
+        project_path = cast(dict[object, object], scope).get("project_path")
+        if isinstance(project_path, str) and project_path.strip():
+            return Path(project_path).expanduser().resolve(strict=False)
+    return namespace_workspace
 
 
 def _snapshot_path(image_id: str, data_dir: Path | None) -> Path:

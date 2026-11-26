@@ -8,7 +8,9 @@ import json
 import mimetypes
 import os
 import re
+import threading
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,6 +79,8 @@ class AttachmentService:
         self.auto_cleanup = auto_cleanup
         self.orphan_days = orphan_days
         self._last_inventory: AttachmentReferenceScan | None = None
+        self._temporary_paths: set[str] = set()
+        self._lifecycle_lock = threading.RLock()
 
     def update_policy(
         self,
@@ -108,6 +112,39 @@ class AttachmentService:
             raise ValueError("snapshot reservation requires an image MIME")
         snapshot_size = len(f"data:{mime};base64,".encode("ascii")) + 4 * ((size + 2) // 3)
         return self.store.reserve(snapshot_size, purpose="image-snapshot")
+
+    def protect_borrowed_sources(self, paths: list[Path]) -> set[str]:
+        """持久保护明确的借用原件，忽略托管根外文件。"""
+        protected: set[str] = set()
+        for path in paths:
+            relative = self.store.protect_source(path, reason="borrowed")
+            if relative is not None:
+                protected.add(relative)
+        return protected
+
+    def retain_temporary_paths(self, paths: Iterable[Path]) -> None:
+        """在现有临时聊天生命周期内排除其文件。"""
+        retained: set[str] = set()
+        for path in paths:
+            try:
+                retained.add(self.store.relative_path(path, require_file=False))
+            except (OSError, ValueError):
+                continue
+        if retained:
+            with self._lifecycle_lock:
+                self._temporary_paths.update(retained)
+
+    def release_temporary_paths(self, paths: Iterable[Path]) -> None:
+        """临时聊天清理文件前解除排除。"""
+        released: set[str] = set()
+        for path in paths:
+            try:
+                released.add(self.store.relative_path(path, require_file=False))
+            except (OSError, ValueError):
+                continue
+        if released:
+            with self._lifecycle_lock:
+                self._temporary_paths.difference_update(released)
 
     def register_upload(
         self,
@@ -361,7 +398,10 @@ class AttachmentService:
         return scan
 
     def usage(self, *, pending_bytes: int = 0) -> AttachmentUsage:
-        return self.store.usage(pending_bytes=pending_bytes)
+        return self.store.usage(
+            pending_bytes=pending_bytes,
+            excluded_paths=self._temporary_path_snapshot(),
+        )
 
     def management_payload(
         self,
@@ -371,22 +411,35 @@ class AttachmentService:
     ) -> dict[str, object]:
         if reconcile:
             self.reconcile()
-        records = self.store.list_active()
+        temporary = self._temporary_path_snapshot()
+        records = [
+            record for record in self.store.list_active()
+            if not self._record_is_temporary(record, temporary)
+        ]
         return {
             "items": [record.management_payload() for record in records],
-            "usage": self.store.usage(pending_bytes=pending_bytes).payload(),
+            "usage": self.store.usage(
+                pending_bytes=pending_bytes,
+                excluded_paths=temporary,
+            ).payload(),
             "settings": self.policy.payload(),
         }
 
     def preview_delete(self, attachment_ids: list[str]) -> AttachmentDeletePreview:
         self.reconcile()
         expanded = self._include_dependents(attachment_ids)
-        return self.store.preview_delete(expanded)
+        return self.store.preview_delete(
+            expanded,
+            excluded_paths=self._temporary_path_snapshot(),
+        )
 
     def delete(self, attachment_ids: list[str]) -> AttachmentDeleteResult:
         self.reconcile()
         expanded = self._include_dependents(attachment_ids)
-        return self.store.delete(expanded)
+        return self.store.delete(
+            expanded,
+            excluded_paths=self._temporary_path_snapshot(),
+        )
 
     def reclaim_deleted_sessions(self, session_keys: set[str]) -> AttachmentDeleteResult:
         """删除会话后立即回收其独占且已无引用的托管附件。"""
@@ -418,7 +471,11 @@ class AttachmentService:
         scan = self.reconcile()
         if not scan.complete:
             return AttachmentDeleteResult((), (), 0, ())
-        return self.store.cleanup_orphans(orphan_days=self.orphan_days, now=now)
+        return self.store.cleanup_orphans(
+            orphan_days=self.orphan_days,
+            now=now,
+            excluded_paths=self._temporary_path_snapshot(),
+        )
 
     def cleanup_if_due(self) -> AttachmentDeleteResult:
         return self.cleanup_orphans() if self.auto_cleanup else AttachmentDeleteResult((), (), 0, ())
@@ -440,16 +497,18 @@ class AttachmentService:
         return None
 
     def _register_inventory(self, scan: AttachmentReferenceScan) -> None:
-        borrowed = {_canonical_path(path) for path in scan.borrowed_paths}
+        self.protect_borrowed_sources([Path(path) for path in scan.borrowed_paths])
+        protected = self.store.protected_paths()
+        temporary = self._temporary_path_snapshot()
         referenced_paths = {_canonical_path(path) for path in scan.paths}
         for path in self._candidate_files():
             canonical = _canonical_path(path)
-            if canonical in borrowed:
+            relative = self.store.relative_path(path, require_file=True)
+            if relative in protected or relative in temporary:
                 continue
             existing = self.store.attachment_for_path(path)
             if existing is not None and existing.status != "deleted":
                 continue
-            relative = self.store.relative_path(path, require_file=True)
             source, name, kind, attachment_id = _classify_path(relative)
             if source is None:
                 continue
@@ -526,8 +585,16 @@ class AttachmentService:
         candidates: list[Path] = []
         websocket = self.data_dir / "media" / "websocket"
         if websocket.is_dir() and not websocket.is_symlink():
+            journal = websocket / ".pending-attachments"
+            pending_names = {
+                marker.name
+                for marker in journal.iterdir()
+                if marker.is_file()
+            } if journal.is_dir() and not journal.is_symlink() else set()
             for path in websocket.iterdir():
                 if path.is_symlink() or not path.is_file():
+                    continue
+                if path.name in pending_names:
                     continue
                 if _UPLOAD_NAME.fullmatch(path.name) or _OUTBOUND_NAME.fullmatch(path.name):
                     candidates.append(path)
@@ -537,6 +604,17 @@ class AttachmentService:
                 if not path.is_symlink() and path.is_file() and _SNAPSHOT_NAME.fullmatch(path.name):
                     candidates.append(path)
         return candidates
+
+    def _temporary_path_snapshot(self) -> frozenset[str]:
+        with self._lifecycle_lock:
+            return frozenset(self._temporary_paths)
+
+    @staticmethod
+    def _record_is_temporary(
+        record: AttachmentRecord,
+        temporary: frozenset[str],
+    ) -> bool:
+        return any(file.relative_path in temporary for file in record.files)
 
     def _reference_map(
         self, scan: AttachmentReferenceScan,

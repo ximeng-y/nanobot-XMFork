@@ -68,6 +68,7 @@ def _write_session_db(
     sessions_root: Path,
     namespace: str,
     sessions: dict[str, list[dict[str, Any]]],
+    metadata: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     directory = sessions_root / namespace
     directory.mkdir(parents=True, exist_ok=True)
@@ -85,9 +86,11 @@ def _write_session_db(
             )"""
         )
         for key, records in sessions.items():
+            session_metadata = {"title": key.removeprefix("websocket:")}
+            session_metadata.update((metadata or {}).get(key, {}))
             connection.execute(
                 "INSERT INTO sessions (key, metadata) VALUES (?, ?)",
-                (key, json.dumps({"title": key.removeprefix("websocket:")})),
+                (key, json.dumps(session_metadata)),
             )
             connection.executemany(
                 "INSERT INTO messages (session_key, position, record) VALUES (?, ?, ?)",
@@ -380,7 +383,7 @@ def test_borrowed_and_unknown_files_inside_media_are_protected_from_cleanup(
     borrowed = _upload_path(service.data_dir, "aaaaaaaaaaaa.png")
     unknown = service.data_dir / "media" / "websocket" / "manual-notes.bin"
     unknown.write_bytes(b"unknown")
-    _write_session_db(
+    database = _write_session_db(
         service.sessions_root,
         "d" * 32,
         {
@@ -397,9 +400,163 @@ def test_borrowed_and_unknown_files_inside_media_are_protected_from_cleanup(
 
     assert payload["items"] == []
     assert payload["usage"]["protected_bytes"] == len(PNG_BYTES) + len(b"unknown")
-    service.cleanup_orphans(now=datetime.now().astimezone() + timedelta(days=365))
+    _delete_session_rows(database, {"websocket:borrowed"})
+
+    restarted = _service(tmp_path, auto_cleanup=True, orphan_days=1)
+    restarted.reconcile()
+    restarted_payload = restarted.management_payload()
+    assert restarted_payload["items"] == []
+    assert restarted_payload["usage"]["protected_bytes"] == len(PNG_BYTES) + len(b"unknown")
+    restarted.cleanup_orphans(now=datetime.now().astimezone() + timedelta(days=365))
     assert borrowed.exists()
     assert unknown.exists()
+
+
+def test_temporary_path_exclusion_hides_usage_and_blocks_management_delete(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path)
+    path = _upload_path(service.data_dir)
+    record = service.register_upload(
+        path,
+        name="temporary.png",
+        mime="image/png",
+        session_key="websocket:temporary",
+    )
+    service.retain_temporary_paths([path])
+
+    payload = service.management_payload(reconcile=False)
+
+    assert payload["items"] == []
+    assert payload["usage"]["managed_bytes"] == 0
+    assert payload["usage"]["protected_bytes"] == len(PNG_BYTES)
+    preview = service.preview_delete([record.id])
+    assert preview.items == ()
+    assert preview.blocked == ({
+        "id": record.id,
+        "reason": "Attachment belongs to an active temporary chat",
+    },)
+    assert service.delete([record.id]).deleted == ()
+    assert path.exists()
+
+    service.release_temporary_paths([path])
+    visible = service.management_payload(reconcile=False)
+    assert [item["id"] for item in visible["items"]] == [record.id]
+    assert visible["usage"]["managed_bytes"] == len(PNG_BYTES)
+
+
+def test_same_session_key_across_namespaces_keeps_all_attachment_references(
+    tmp_path: Path,
+) -> None:
+    service = _service(tmp_path, auto_cleanup=True, orphan_days=1)
+    first = _upload_path(service.data_dir, "111111111111.png")
+    second = _upload_path(service.data_dir, "222222222222.png")
+    first_db = _write_session_db(
+        service.sessions_root,
+        "a" * 32,
+        {"websocket:shared": [{"role": "user", "media": [str(first)]}]},
+    )
+    _write_session_db(
+        service.sessions_root,
+        "b" * 32,
+        {"websocket:shared": [{"role": "user", "media": [str(second)]}]},
+    )
+
+    scan = service.reconcile()
+
+    assert scan.complete is True
+    assert scan.sessions["websocket:shared"].paths == {
+        str(first.resolve()),
+        str(second.resolve()),
+    }
+    first_record = service.store.attachment_for_path(first)
+    second_record = service.store.attachment_for_path(second)
+    assert first_record is not None
+    assert second_record is not None
+    future = datetime.now().astimezone() + timedelta(days=365)
+    assert service.cleanup_orphans(now=future).deleted == ()
+    assert first.exists()
+    assert second.exists()
+
+    _delete_session_rows(first_db, {"websocket:shared"})
+    service.reconcile()
+    assert "websocket:shared" in {
+        reference.key for reference in service.store.get(second_record.id).references
+    }
+    service.cleanup_orphans(now=future)
+    assert second.exists()
+
+
+@pytest.mark.parametrize("session_override", [False, True])
+def test_relative_markdown_uses_namespace_or_session_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    session_override: bool,
+) -> None:
+    service = _service(tmp_path, auto_cleanup=True, orphan_days=1)
+    workspace = tmp_path / "workspace"
+    wrong_workspace = tmp_path / "wrong-workspace"
+    cwd = tmp_path / "unrelated-cwd"
+    for directory in (workspace, wrong_workspace, cwd):
+        directory.mkdir()
+    monkeypatch.chdir(cwd)
+    source = workspace / "chart.png"
+    source.write_bytes(PNG_BYTES)
+    key = "cli:direct"
+    database = _write_session_db(
+        service.sessions_root,
+        "a" * 32,
+        {key: [{"role": "assistant", "content": "![chart](chart.png)"}]},
+        metadata=(
+            {key: {"workspace_scope": {"project_path": str(workspace)}}}
+            if session_override
+            else None
+        ),
+    )
+    (database.parent / ".workspace").write_text(
+        str(wrong_workspace if session_override else workspace),
+        encoding="utf-8",
+    )
+    staged = service.data_dir / "media" / "websocket" / f"{'a' * 20}-chart.png"
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(PNG_BYTES)
+    record = service.register_outbound_copy(
+        staged,
+        source_path=source,
+        source_digest="a" * 20,
+        session_key=key,
+        reservation=service.reserve(len(PNG_BYTES), purpose="outbound-copy"),
+    )
+    service.store.replace_references({})
+
+    scan = service.reconcile()
+
+    assert scan.complete is True
+    assert key in {reference.key for reference in service.store.get(record.id).references}
+    restarted = _service(tmp_path, auto_cleanup=True, orphan_days=1)
+    future = datetime.now().astimezone() + timedelta(days=365)
+    assert restarted.cleanup_orphans(now=future).deleted == ()
+    assert staged.exists()
+
+
+def test_relative_markdown_without_workspace_marker_is_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service(tmp_path)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    _write_session_db(
+        service.sessions_root,
+        "a" * 32,
+        {"cli:direct": [{"role": "assistant", "content": "![chart](chart.png)"}]},
+    )
+
+    scan = service.reconcile()
+
+    assert scan.complete is False
+    assert scan.sessions["cli:direct"].paths == frozenset()
 
 
 def test_chat_reclaim_handles_parent_then_fork_deletion_order(tmp_path: Path) -> None:

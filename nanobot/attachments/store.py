@@ -340,6 +340,41 @@ class AttachmentStore:
             initially_referenced=initially_referenced,
         )
 
+    def protect_source(self, path: Path, *, reason: str) -> str | None:
+        """持久保护明确借用的实例内原件；托管根外路径不纳入保护表。"""
+        if not reason.strip():
+            raise ValueError("protection reason must not be empty")
+        try:
+            relative = self._relative_path(path, require_file=False)
+        except AttachmentPathError:
+            return None
+        with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute(
+                    """INSERT OR IGNORE INTO protected_attachment_sources
+                       (path, reason, created_at) VALUES (?, ?, ?)""",
+                    (relative, reason, _now_iso()),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+        return relative
+
+    def protected_paths(self) -> set[str]:
+        """返回不可删除的借用原件相对路径。"""
+        with self._lock:
+            connection = self._connect()
+            try:
+                return {
+                    row["path"]
+                    for row in connection.execute(
+                        "SELECT path FROM protected_attachment_sources",
+                    )
+                }
+            finally:
+                connection.close()
+
     def add_file(
         self,
         attachment_id: str,
@@ -590,19 +625,31 @@ class AttachmentStore:
             finally:
                 connection.close()
 
-    def usage(self, *, pending_bytes: int = 0) -> AttachmentUsage:
+    def usage(
+        self,
+        *,
+        pending_bytes: int = 0,
+        excluded_paths: Iterable[str] = (),
+    ) -> AttachmentUsage:
+        excluded = frozenset(excluded_paths)
+        placeholders = _placeholders(excluded)
+        excluded_sql = f" AND f.path NOT IN ({placeholders})" if excluded else ""
         with self._lock:
             connection = self._connect()
             try:
-                managed = self._managed_bytes_on(connection)
+                managed = self._managed_bytes_on(
+                    connection,
+                    excluded_paths=excluded,
+                )
                 registered = {
                     row["path"]
                     for row in connection.execute(
-                        """SELECT DISTINCT f.path
+                        f"""SELECT DISTINCT f.path
                            FROM attachment_files f
                            JOIN attachment_file_links l ON l.file_path=f.path
                            JOIN managed_attachments a ON a.id=l.attachment_id
-                           WHERE a.status != 'deleted'""",
+                           WHERE a.status != 'deleted'{excluded_sql}""",
+                        tuple(excluded),
                     )
                 }
             finally:
@@ -614,27 +661,48 @@ class AttachmentStore:
             protected_bytes=protected,
         )
 
-    def preview_delete(self, attachment_ids: Iterable[str]) -> AttachmentDeletePreview:
+    def preview_delete(
+        self,
+        attachment_ids: Iterable[str],
+        *,
+        excluded_paths: Iterable[str] = (),
+    ) -> AttachmentDeletePreview:
         ids = tuple(dict.fromkeys(attachment_ids))
         with self._lock:
             connection = self._connect()
             try:
                 records = self._load_records(connection, ids)
-                return self._preview_delete_on(connection, ids, records)
+                return self._preview_delete_on(
+                    connection,
+                    ids,
+                    records,
+                    excluded_paths=frozenset(excluded_paths),
+                )
             finally:
                 connection.close()
 
-    def delete(self, attachment_ids: Iterable[str]) -> AttachmentDeleteResult:
+    def delete(
+        self,
+        attachment_ids: Iterable[str],
+        *,
+        excluded_paths: Iterable[str] = (),
+    ) -> AttachmentDeleteResult:
         """按稳定 ID 删除附件；仅删除没有其他有效逻辑附件共享的文件。"""
         ids = tuple(dict.fromkeys(attachment_ids))
         if not ids:
             return AttachmentDeleteResult((), (), 0, ())
+        excluded = frozenset(excluded_paths)
         with self._lock:
             connection = self._connect()
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 records = self._load_records(connection, ids)
-                preview = self._preview_delete_on(connection, ids, records)
+                preview = self._preview_delete_on(
+                    connection,
+                    ids,
+                    records,
+                    excluded_paths=excluded,
+                )
                 blocked = {str(item["id"]): str(item["reason"]) for item in preview.blocked}
                 planned = [
                     record for record in records
@@ -721,31 +789,48 @@ class AttachmentStore:
         *,
         orphan_days: int,
         now: datetime | None = None,
+        excluded_paths: Iterable[str] = (),
     ) -> AttachmentDeleteResult:
         """删除超过指定天数仍无会话引用的附件。"""
         if isinstance(orphan_days, bool) or orphan_days <= 0:
             raise ValueError("orphan_days must be a positive integer")
         current = now or datetime.now(timezone.utc)
         cutoff = (current - timedelta(days=orphan_days)).astimezone(timezone.utc).isoformat()
+        excluded = tuple(dict.fromkeys(excluded_paths))
+        excluded_clause = ""
+        parameters: list[object] = [cutoff]
+        if excluded:
+            excluded_clause = f"""
+                         AND NOT EXISTS (
+                           SELECT 1
+                           FROM attachment_file_links l
+                           JOIN attachment_files f ON f.path=l.file_path
+                           WHERE l.attachment_id=managed_attachments.id
+                             AND f.path IN ({_placeholders(excluded)})
+                         )"""
+            parameters.extend(excluded)
         with self._lock:
             connection = self._connect()
             try:
                 rows = connection.execute(
-                    """SELECT id FROM managed_attachments
+                    f"""SELECT id FROM managed_attachments
                        WHERE status='available' AND unreferenced_since IS NOT NULL
                          AND unreferenced_since <= ?
                          AND NOT EXISTS (
                            SELECT 1 FROM attachment_references r
                            WHERE r.attachment_id=managed_attachments.id
-                         )
+                         ){excluded_clause}
                        ORDER BY unreferenced_since, id""",
-                    (cutoff,),
+                    tuple(parameters),
                 ).fetchall()
             finally:
                 connection.close()
         if not rows:
             return AttachmentDeleteResult((), (), 0, ())
-        return self.delete(tuple(row["id"] for row in rows))
+        return self.delete(
+            tuple(row["id"] for row in rows),
+            excluded_paths=excluded,
+        )
 
     def status_for_ids(self, attachment_ids: Iterable[str]) -> dict[str, AttachmentStatus]:
         records = self.get_many(attachment_ids)
@@ -811,6 +896,11 @@ class AttachmentStore:
                         session_key TEXT NOT NULL,
                         title TEXT NOT NULL,
                         PRIMARY KEY (attachment_id, session_key)
+                    );
+                    CREATE TABLE IF NOT EXISTS protected_attachment_sources (
+                        path TEXT PRIMARY KEY,
+                        reason TEXT NOT NULL,
+                        created_at TEXT NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS managed_attachments_orphans
                         ON managed_attachments(status, unreferenced_since);
@@ -908,12 +998,22 @@ class AttachmentStore:
         finally:
             connection.close()
 
-    def _managed_bytes_on(self, connection: sqlite3.Connection) -> int:
+    def _managed_bytes_on(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        excluded_paths: frozenset[str] = frozenset(),
+    ) -> int:
+        excluded_sql = (
+            f" AND f.path NOT IN ({_placeholders(excluded_paths)})"
+            if excluded_paths else ""
+        )
         rows = connection.execute(
-            """SELECT DISTINCT f.path, f.bytes FROM attachment_files f
+            f"""SELECT DISTINCT f.path, f.bytes FROM attachment_files f
                JOIN attachment_file_links l ON l.file_path=f.path
                JOIN managed_attachments a ON a.id=l.attachment_id
-               WHERE a.status != 'deleted'"""
+               WHERE a.status != 'deleted'{excluded_sql}""",
+            tuple(excluded_paths),
         ).fetchall()
         total = 0
         for row in rows:
@@ -1042,8 +1142,16 @@ class AttachmentStore:
         connection: sqlite3.Connection,
         requested_ids: tuple[str, ...],
         records: tuple[AttachmentRecord, ...],
+        *,
+        excluded_paths: frozenset[str] = frozenset(),
     ) -> AttachmentDeletePreview:
         by_id = {record.id: record for record in records}
+        protected_paths = {
+            row["path"]
+            for row in connection.execute(
+                "SELECT path FROM protected_attachment_sources",
+            )
+        }
         blocked: list[dict[str, str]] = []
         for attachment_id in requested_ids:
             if attachment_id not in by_id:
@@ -1052,6 +1160,18 @@ class AttachmentStore:
             record = by_id[attachment_id]
             if record.status == "deleted":
                 blocked.append({"id": attachment_id, "reason": "Attachment is already deleted"})
+                continue
+            if any(file.relative_path in protected_paths for file in record.files):
+                blocked.append({
+                    "id": attachment_id,
+                    "reason": "Attachment source is explicitly borrowed and protected",
+                })
+                continue
+            if any(file.relative_path in excluded_paths for file in record.files):
+                blocked.append({
+                    "id": attachment_id,
+                    "reason": "Attachment belongs to an active temporary chat",
+                })
                 continue
             for file in record.files:
                 try:

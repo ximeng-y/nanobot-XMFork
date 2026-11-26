@@ -957,7 +957,9 @@ class GatewayHTTPHandler:
                 paths, session_key=session_key,
             ),
             augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
-                text, workspace_path=scope.project_path,
+                text,
+                workspace_path=scope.project_path,
+                session_key=session_key,
             ),
         )
         return _http_json_response(data, extra_headers=_NO_STORE_HEADERS)
@@ -1265,6 +1267,7 @@ class GatewayHTTPHandler:
             augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
                 text,
                 workspace_path=scope.project_path,
+                session_key=decoded_key,
             ),
             session_messages_loader=lambda: self._read_session_messages(decoded_key),
             session_version_loader=lambda: self._read_session_version(decoded_key),

@@ -87,6 +87,35 @@ def test_shared_file_is_counted_once_and_deleted_only_with_its_last_owner(
     assert not path.exists()
 
 
+def test_protected_source_survives_restart_and_blocks_manual_or_orphan_deletion(
+    tmp_path: Path,
+) -> None:
+    store = AttachmentStore(tmp_path)
+    path = _managed_file(tmp_path, "aaaaaaaaaaaa.png", size=5)
+    record = store.register(
+        name=path.name,
+        kind="image",
+        source="upload",
+        files=[AttachmentFileSpec(path)],
+        metadata={"inventory": True},
+        initially_referenced=False,
+    )
+
+    assert store.protect_source(path, reason="borrowed") == "media/websocket/aaaaaaaaaaaa.png"
+
+    restarted = AttachmentStore(tmp_path)
+    preview = restarted.preview_delete([record.id])
+    assert preview.blocked == ({
+        "id": record.id,
+        "reason": "Attachment source is explicitly borrowed and protected",
+    },)
+    assert restarted.delete([record.id]).deleted == ()
+    future = datetime.now().astimezone() + timedelta(days=365)
+    assert restarted.cleanup_orphans(orphan_days=1, now=future).deleted == ()
+    assert path.exists()
+    assert restarted.get(record.id).status == "available"
+
+
 def test_delete_failure_keeps_record_and_does_not_report_freed_bytes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -571,6 +572,18 @@ async def test_temporary_chat_is_transient_and_discarded(history, bus, tmp_path)
     session = sessions.get_cached(inbound.session_key)
     assert session is not None
     assert session.policy.persist is False
+    assert upload.exists()
+    management = channel.gateway.attachments.management_payload()
+    assert management["items"] == []
+    assert management["usage"]["managed_bytes"] == 0
+    channel.gateway.attachments.update_policy(
+        max_bytes=None,
+        auto_cleanup=True,
+        orphan_days=1,
+    )
+    channel.gateway.attachments.cleanup_orphans(
+        now=datetime.now().astimezone() + timedelta(days=365),
+    )
     assert upload.exists()
     assert history.read(inbound.session_key) == []
     assert [payload["event"] for payload in _sent_ws_payloads(connection)] == [

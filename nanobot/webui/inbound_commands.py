@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from loguru import logger
@@ -900,6 +901,7 @@ class WebUICommandRouter:
                 **rejection_fields,
             )
             return
+        self._attachments.protect_borrowed_sources([Path(item["path"]) for item in local])
         if local:
             metadata[INBOUND_META_LOCAL_MEDIA] = [item["path"] for item in local]
         if temporary_policy is not None:

@@ -137,6 +137,8 @@ def build_gateway_services(
         session_manager=session_manager,
         workspaces=workspaces,
         logger=logger,
+        retain_attachment_paths=attachments.retain_temporary_paths,
+        release_attachment_paths=attachments.release_temporary_paths,
     )
     session_projection = WebUISessionProjection(session_manager, subagent_manager=subagent_manager, log=logger)
     http = GatewayHTTPHandler(

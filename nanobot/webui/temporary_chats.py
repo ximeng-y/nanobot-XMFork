@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -53,11 +54,15 @@ class WebUITemporaryChats:
         session_manager: SessionManager | None,
         workspaces: WebUIWorkspaceController,
         logger: Any,
+        retain_attachment_paths: Callable[[list[Path]], None] | None = None,
+        release_attachment_paths: Callable[[list[Path]], None] | None = None,
     ) -> None:
         self._bus = bus
         self._sessions = session_manager
         self._workspaces = workspaces
         self._logger = logger
+        self._retain_attachment_paths = retain_attachment_paths
+        self._release_attachment_paths = release_attachment_paths
         self._commands = CommandRouter()
         register_builtin_commands(self._commands)
         self._owners: dict[str, object] = {}
@@ -140,6 +145,8 @@ class WebUITemporaryChats:
         if self._owners.get(chat_id) is not owner:
             raise TemporaryChatError("temporary_chat_unavailable")
         self._media_paths.setdefault(chat_id, set()).update(paths)
+        if self._retain_attachment_paths is not None:
+            self._retain_attachment_paths([Path(path) for path in paths])
 
     def chat_ids_for_owner(self, owner: object) -> tuple[str, ...]:
         return tuple(self._owner_chat_ids.get(owner, ()))
@@ -155,7 +162,10 @@ class WebUITemporaryChats:
         )
 
     def _discard_media(self, chat_id: str) -> None:
-        for raw_path in self._media_paths.pop(chat_id, set()):
+        paths = self._media_paths.pop(chat_id, set())
+        if paths and self._release_attachment_paths is not None:
+            self._release_attachment_paths([Path(path) for path in paths])
+        for raw_path in paths:
             try:
                 Path(raw_path).unlink(missing_ok=True)
             except OSError:

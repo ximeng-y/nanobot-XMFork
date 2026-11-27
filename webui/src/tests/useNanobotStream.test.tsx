@@ -3053,6 +3053,43 @@ describe("useNanobotStream", () => {
     expect(result.current.messages[0]).toMatchObject({ id: optimistic.id, media, deliveryStatus: "accepted" });
   });
 
+  it("keeps deleted attachment state when live projection refreshes an optimistic image", () => {
+    const fake = fakeClient();
+    const { result } = renderHook(() => useNanobotStream("deleted-image", EMPTY_MESSAGES), {
+      wrapper: wrap(fake.client),
+    });
+    act(() => {
+      result.current.send("look", [{
+        media: { data_url: "data:image/png;base64,AAAA", name: "gone.png" },
+        preview: { kind: "image", url: "data:image/png;base64,AAAA", name: "gone.png" },
+      }]);
+    });
+    const optimistic = result.current.messages[0];
+    const media: UIMediaAttachment[] = [{
+      kind: "image",
+      name: "gone.png",
+      managed_id: "att-1",
+      deleted: true,
+    }];
+    act(() => fake.emit("deleted-image", {
+      event: "user_message",
+      chat_id: "deleted-image",
+      text: "look",
+      turn_id: optimistic.turnId!,
+      starts_turn: true,
+      media_urls: media,
+    }));
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0]).toMatchObject({
+      id: optimistic.id,
+      content: "look",
+      media,
+      deliveryStatus: "accepted",
+    });
+    expect(result.current.messages[0].images).toBeUndefined();
+  });
+
   it("inlines quoted context into the optimistic and outbound user message", () => {
     const fake = fakeClient();
     const { result } = renderHook(() => useNanobotStream("chat-quote", EMPTY_MESSAGES), {

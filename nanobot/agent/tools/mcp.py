@@ -802,8 +802,12 @@ class MCPToolWrapper(_MCPWrapperBase):
     def _store_image_block(
         self, data_url: str, arguments: Mapping[str, Any]
     ) -> dict[str, Any] | None:
+        from nanobot.agent.tools.context import current_request_session_key
+        from nanobot.attachments.runtime import get_attachment_service
+        from nanobot.attachments.store import AttachmentCapacityError
         from nanobot.utils.artifacts import ArtifactError, store_generated_image_artifact
 
+        session_key = current_request_session_key()
         try:
             return store_generated_image_artifact(
                 data_url,
@@ -811,8 +815,10 @@ class MCPToolWrapper(_MCPWrapperBase):
                 model=str(arguments.get("model") or ""),
                 save_dir="generated",
                 provider=f"mcp:{self._server_name}",
+                session_key=session_key,
+                attachment_service=get_attachment_service() if session_key else None,
             )
-        except (ArtifactError, OSError) as exc:
+        except (ArtifactError, AttachmentCapacityError, OSError) as exc:
             logger.warning(
                 "MCP tool '{}' returned an image that could not be stored: {}",
                 self._name,

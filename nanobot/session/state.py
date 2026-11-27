@@ -1054,6 +1054,18 @@ class SessionState:
         *,
         expected_generation: str | None = None,
     ) -> bool:
+        deleted, _ = await self.delete_with_removed(
+            key,
+            expected_generation=expected_generation,
+        )
+        return deleted
+
+    async def delete_with_removed(
+        self,
+        key: str,
+        *,
+        expected_generation: str | None = None,
+    ) -> tuple[bool, set[str]]:
         def delete() -> tuple[bool, set[str]]:
             def write() -> tuple[bool, set[str]]:
                 session = self._load(key, history=False)
@@ -1095,7 +1107,7 @@ class SessionState:
         if self._on_delete is not None:
             for current in removed:
                 self._on_delete(current)
-        return deleted
+        return deleted, removed
 
     async def update_metadata(
         self,

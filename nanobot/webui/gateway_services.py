@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from loguru import logger as default_logger
 
+from nanobot.attachments.runtime import get_attachment_service
+from nanobot.attachments.service import AttachmentService
 from nanobot.channels.websocket.attachment_http import AttachmentHTTP
 from nanobot.channels.websocket.attachment_policy import AttachmentIngressLimits
 from nanobot.channels.websocket.attachment_store import AttachmentStore
 from nanobot.config.loader import get_config_path
-from nanobot.config.paths import get_media_dir
 from nanobot.webui.automation_routes import WebUIAutomationRoutes
 from nanobot.webui.gateway_endpoint import WebUIGatewayEndpoint
 from nanobot.webui.gateway_tokens import GatewayTokenStore
@@ -43,6 +44,7 @@ class GatewayServices:
     tokens: GatewayTokenStore
     media: WebUIMediaGateway
     uploads: AttachmentHTTP
+    attachments: AttachmentService
     ingress: WebUIIngressPolicy
     transcripts: WebUITranscriptRecorder
     workspaces: WebUIWorkspaceController
@@ -93,6 +95,18 @@ def build_gateway_services(
         ),
         refresh_runtime_config=refresh_runtime_config,
     )
+    attachment_sessions_root = (
+        session_manager.sessions_dir.parent
+        if session_manager is not None
+        else config_path.parent / "sessions"
+        if config_path is not None
+        else get_config_path().parent / "sessions"
+    )
+    attachments = get_attachment_service(
+        data_dir=(config_path or settings.config.path).parent,
+        sessions_root=attachment_sessions_root,
+        config=settings.config.load().attachments,
+    )
     tokens = GatewayTokenStore()
     ingress = WebUIIngressPolicy(attachments=AttachmentIngressLimits(
         max_count=config.uploads.max_count,
@@ -112,12 +126,14 @@ def build_gateway_services(
     media = WebUIMediaGateway(
         workspace_path=workspace_path,
         logger=logger,
+        attachments=attachments,
     )
     uploads = AttachmentHTTP(AttachmentStore(
-        get_media_dir("websocket"),
+        attachments.data_dir / "media" / "websocket",
         limits=ingress.attachments,
         max_pending=config.uploads.max_pending,
         max_pending_bytes=config.uploads.max_pending_bytes,
+        managed_store=attachments.store,
     ))
     transcripts = WebUITranscriptRecorder(session_manager, log=logger)
     workspaces = WebUIWorkspaceController(
@@ -130,6 +146,8 @@ def build_gateway_services(
         session_manager=session_manager,
         workspaces=workspaces,
         logger=logger,
+        retain_attachment_paths=attachments.retain_temporary_paths,
+        release_attachment_paths=attachments.release_temporary_paths,
     )
     session_projection = WebUISessionProjection(session_manager, subagent_manager=subagent_manager, log=logger)
     http = GatewayHTTPHandler(
@@ -142,6 +160,8 @@ def build_gateway_services(
         bus=bus,
         tokens=tokens,
         media=media,
+        attachments=attachments,
+        uploads=uploads,
         ingress=ingress,
         workspaces=workspaces,
         settings=settings,
@@ -176,6 +196,7 @@ def build_gateway_services(
         tokens=tokens,
         media=media,
         uploads=uploads,
+        attachments=attachments,
         ingress=ingress,
         transcripts=transcripts,
         workspaces=workspaces,

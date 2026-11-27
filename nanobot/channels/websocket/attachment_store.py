@@ -14,6 +14,8 @@ from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from nanobot.attachments.store import AttachmentCapacityError, CapacityReservation
+from nanobot.attachments.store import AttachmentStore as ManagedAttachmentStore
 from nanobot.channels.websocket.attachment_policy import (
     DEFAULT_MAX_PENDING,
     DEFAULT_MAX_PENDING_BYTES,
@@ -39,6 +41,19 @@ class StagedAttachment:
     mime: str
     size: int
     expires: float
+    managed_reservation: CapacityReservation | None = None
+    snapshot_reservation: CapacityReservation | None = None
+
+
+@dataclass(frozen=True)
+class CommittedAttachment:
+    """离开暂存区、但尚未由接收方登记长期归属的文件。"""
+
+    path: Path
+    mime: str
+    size: int
+    managed_reservation: CapacityReservation | None
+    snapshot_reservation: CapacityReservation | None
 
 
 class AttachmentStore:
@@ -60,6 +75,7 @@ class AttachmentStore:
         ttl_seconds: float = 600,
         upload_timeout: float = UPLOAD_TIMEOUT_SECONDS,
         upload_idle_timeout: float = UPLOAD_IDLE_TIMEOUT_SECONDS,
+        managed_store: ManagedAttachmentStore | None = None,
     ) -> None:
         if min(max_pending, max_pending_bytes, ttl_seconds, upload_timeout, upload_idle_timeout) <= 0:
             raise ValueError("Attachment store bounds must be positive")
@@ -70,6 +86,7 @@ class AttachmentStore:
         self.ttl_seconds = ttl_seconds
         self.upload_timeout = upload_timeout
         self.upload_idle_timeout = upload_idle_timeout
+        self.managed_store = managed_store
         self._entries: dict[str, StagedAttachment] = {}
         self._reserved_bytes = 0
         self._active = 0
@@ -114,7 +131,24 @@ class AttachmentStore:
         stored = False
         created = False
         marker_created = False
+        managed_reservation: CapacityReservation | None = None
+        snapshot_reservation: CapacityReservation | None = None
         try:
+            if self.managed_store is not None:
+                try:
+                    managed_reservation = self.managed_store.reserve(
+                        size, purpose="attachment-upload",
+                    )
+                    if mime.startswith("image/"):
+                        snapshot_size = (
+                            len(f"data:{mime};base64,".encode("ascii"))
+                            + 4 * ((size + 2) // 3)
+                        )
+                        snapshot_reservation = self.managed_store.reserve(
+                            snapshot_size, purpose="image-snapshot",
+                        )
+                except AttachmentCapacityError as exc:
+                    raise AttachmentUploadError(str(exc)) from exc
             self.media_dir.mkdir(parents=True, exist_ok=True)
             path = media_destination(
                 self.media_dir, mime,
@@ -143,7 +177,13 @@ class AttachmentStore:
                 raise AttachmentUploadError("Incomplete attachment body")
             reference = secrets.token_urlsafe(32)
             self._entries[reference] = StagedAttachment(
-                owner, path, mime, size, time.monotonic() + self.ttl_seconds,
+                owner,
+                path,
+                mime,
+                size,
+                time.monotonic() + self.ttl_seconds,
+                managed_reservation,
+                snapshot_reservation,
             )
             stored = True
             return reference
@@ -151,6 +191,10 @@ class AttachmentStore:
             self._active -= 1
             if not stored:
                 self._reserved_bytes -= size
+                if managed_reservation is not None:
+                    managed_reservation.release()
+                if snapshot_reservation is not None:
+                    snapshot_reservation.release()
                 if path is not None:
                     if created:
                         path.unlink(missing_ok=True)
@@ -208,16 +252,39 @@ class AttachmentStore:
     def resolve(self, references: list[str], *, owner: str) -> list[str]:
         return [str(entry.path) for entry in self.inspect(references, owner=owner)]
 
+    @property
+    def pending_bytes(self) -> int:
+        return self._reserved_bytes
+
     def commit(self, references: list[str], *, owner: str) -> list[str]:
         """Transfer validated files to session ownership after message acceptance.
 
         The caller must not await between resolve, synchronous acceptance, and
         commit. A rejected message must leave references staged for retry.
         """
-        paths = self.resolve(references, owner=owner)
+        committed = self.commit_managed(references, owner=owner)
+        for entry in committed:
+            if entry.managed_reservation is not None:
+                entry.managed_reservation.release()
+            if entry.snapshot_reservation is not None:
+                entry.snapshot_reservation.release()
+        return [str(entry.path) for entry in committed]
+
+    def commit_managed(self, references: list[str], *, owner: str) -> list[CommittedAttachment]:
+        """转移暂存文件并返回接收方必须登记或释放的长期额度预留。"""
+        self.inspect(references, owner=owner)
+        committed: list[CommittedAttachment] = []
         for reference in references:
+            entry = self._entries[reference]
+            committed.append(CommittedAttachment(
+                path=entry.path,
+                mime=entry.mime,
+                size=entry.size,
+                managed_reservation=entry.managed_reservation,
+                snapshot_reservation=entry.snapshot_reservation,
+            ))
             self._release_committed(reference)
-        return paths
+        return committed
 
     def commit_single(self, reference: str, *, owner: str) -> str:
         """Transfer one non-message file without applying message batch limits."""
@@ -235,6 +302,7 @@ class AttachmentStore:
                 entry.path.unlink(missing_ok=True)
                 (self._journal / entry.path.name).unlink(missing_ok=True)
                 self._reserved_bytes -= entry.size
+                _release_staged_reservations(entry)
                 del self._entries[reference]
 
     def prune(self) -> None:
@@ -251,6 +319,7 @@ class AttachmentStore:
                 entry.path.unlink(missing_ok=True)
                 (self._journal / entry.path.name).unlink(missing_ok=True)
                 self._reserved_bytes -= entry.size
+                _release_staged_reservations(entry)
                 del self._entries[reference]
 
     def clear(self) -> None:
@@ -261,4 +330,12 @@ class AttachmentStore:
             entry.path.unlink(missing_ok=True)
             (self._journal / entry.path.name).unlink(missing_ok=True)
             self._reserved_bytes -= entry.size
+            _release_staged_reservations(entry)
             del self._entries[reference]
+
+
+def _release_staged_reservations(entry: StagedAttachment) -> None:
+    if entry.managed_reservation is not None:
+        entry.managed_reservation.release()
+    if entry.snapshot_reservation is not None:
+        entry.snapshot_reservation.release()

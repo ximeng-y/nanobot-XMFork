@@ -28,6 +28,7 @@ from nanobot.agent.tools.web_config import (
     WebSearchConfig as WebSearchConfig,
 )
 from nanobot.agent.tools.web_config import WebToolsConfig
+from nanobot.attachments.config import AttachmentStorageConfig
 from nanobot.config.home import get_default_workspace
 from nanobot.config.network import NetworkConfig, migrate_legacy_proxy_config
 from nanobot.config.timezone import detect_system_timezone
@@ -506,6 +507,7 @@ class Config(BaseSettings):
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     gateway: GatewayConfig = Field(default_factory=GatewayConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    attachments: AttachmentStorageConfig = Field(default_factory=AttachmentStorageConfig)
     model_presets: dict[str, ModelPresetConfig] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("modelPresets", "model_presets"),

@@ -49,6 +49,47 @@ describe("attachment download cards", () => {
     expect(unnamed.closest("[data-file-attachment]")).toHaveTextContent("ZIP");
     expect(screen.getByRole("link", { name: "Download LICENSE" }).closest("[data-file-attachment]")).toHaveTextContent("File attachment");
   });
+
+  it("keeps a deleted attachment from exposing its stale URL and renders a visible state", () => {
+    const { container } = render(
+      <AttachmentTile attachment={{
+        kind: "image",
+        name: "chart.png",
+        url: "/api/media/signed/deleted",
+        managed_id: "att-1",
+        deleted: true,
+      }} />,
+    );
+
+    expect(screen.getByText("Deleted")).toBeVisible();
+    expect(container.querySelector("img")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("does not mount or retry a deleted video from its stale URL", () => {
+    const { container } = render(
+      <AttachmentTile attachment={{
+        kind: "video",
+        name: "clip.mp4",
+        url: "/api/media/signed/deleted-video",
+        managed_id: "att-video",
+        deleted: true,
+      }} />,
+    );
+
+    expect(screen.getByText("Deleted")).toBeVisible();
+    expect(container.querySelector("video")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("keeps an ordinary missing image distinct from a deleted attachment", () => {
+    render(<AttachmentTile attachment={{ kind: "image", name: "missing.png" }} />);
+
+    expect(screen.getByText("Attachment unavailable")).toBeVisible();
+    expect(screen.queryByText("Deleted")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
 });
 
 describe("delivered file type cards", () => {
@@ -81,5 +122,25 @@ describe("delivered file type cards", () => {
     expect(link).toHaveAttribute("href", "https://example.com/notes.txt");
     expect(container.querySelectorAll("[data-file-attachment]")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Download report.pdf" })).toHaveAttribute("download", "report.pdf");
+  });
+});
+
+describe("deleted historical media", () => {
+  it("keeps message text while showing deleted images as attachments and valid images in the gallery", () => {
+    const { container } = render(<MessageBubble message={{
+      id: "deleted-media",
+      role: "assistant",
+      content: "The result text is still here.",
+      createdAt: 1,
+      media: [
+        { kind: "image", name: "valid.png", url: "/api/media/signed/valid", managed_id: "att-valid" },
+        { kind: "image", name: "deleted.png", managed_id: "att-deleted", deleted: true },
+      ],
+    }} />);
+
+    expect(screen.getByText("The result text is still here.")).toBeVisible();
+    expect(screen.getByText("Deleted")).toBeVisible();
+    expect(container.querySelector('img[src="/api/media/signed/valid"]')).toBeInTheDocument();
+    expect(container.querySelector('img[src*="deleted"]')).not.toBeInTheDocument();
   });
 });

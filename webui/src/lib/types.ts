@@ -47,6 +47,10 @@ export interface UIMediaAttachment {
   kind: UIMediaKind;
   url?: string;
   name?: string;
+  /** 托管附件的稳定 ID；旧消息可能没有。 */
+  managed_id?: string;
+  /** 文件已被附件管理删除，但消息和附件占位仍需保留。 */
+  deleted?: boolean;
 }
 
 interface UIMessageSource { kind: "cron" | "local_trigger" | "trigger" | string; label?: string; }
@@ -349,6 +353,85 @@ export interface SessionDeleteResult {
   deleted: boolean;
   blocked_by_automations?: boolean;
   automations?: SessionAutomationJob[];
+  attachments?: {
+    deleted: string[];
+    failed: AttachmentDeleteFailure[];
+    freed_bytes: number;
+  };
+}
+
+export type ManagedAttachmentSource =
+  | "upload"
+  | "image_snapshot"
+  | "generated"
+  | "outbound_copy";
+
+export type ManagedAttachmentStatus = "available" | "missing" | "deleted";
+
+export interface ManagedAttachmentReference {
+  key: string;
+  title: string;
+}
+
+export interface ManagedAttachment {
+  id: string;
+  name: string;
+  kind: UIMediaKind;
+  source: ManagedAttachmentSource;
+  bytes: number;
+  created_at: string;
+  unreferenced_since: string | null;
+  references: ManagedAttachmentReference[];
+  status: ManagedAttachmentStatus;
+}
+
+export interface ManagedAttachmentsUsage {
+  managed_bytes: number;
+  pending_bytes: number;
+  protected_bytes: number;
+}
+
+export interface ManagedAttachmentSettings {
+  max_bytes: number | null;
+  auto_cleanup: boolean;
+  orphan_days: number;
+}
+
+export interface ManagedAttachmentsPayload {
+  items: ManagedAttachment[];
+  usage: ManagedAttachmentsUsage;
+  settings: ManagedAttachmentSettings;
+}
+
+export interface AttachmentDeleteFailure {
+  id: string;
+  reason: string;
+}
+
+export interface AttachmentSessionReference {
+  key: string;
+  title: string;
+}
+
+export interface ManagedAttachmentDeletePreviewItem {
+  id: string;
+  name: string;
+  bytes: number;
+  files: string[];
+}
+
+export interface ManagedAttachmentDeletePreview {
+  items: ManagedAttachmentDeletePreviewItem[];
+  affected_sessions: AttachmentSessionReference[];
+  estimated_freed_bytes: number;
+  blocked: AttachmentDeleteFailure[];
+}
+
+export interface ManagedAttachmentDeleteResult {
+  deleted: string[];
+  failed: AttachmentDeleteFailure[];
+  freed_bytes: number;
+  affected_sessions: AttachmentSessionReference[];
 }
 
 export interface SkillSummary {
@@ -1577,7 +1660,13 @@ export type InboundEvent =
       chat_id: string;
       turn_id: string;
       waiting_for_model?: true;
-      media_urls?: UIMediaAttachment[];
+      media_urls?: Array<{
+        url?: string;
+        name?: string;
+        kind?: UIMediaKind;
+        managed_id?: string;
+        deleted?: boolean;
+      }>;
       starts_turn?: boolean;
       active_turn_id?: string;
       started_at?: number;
@@ -1607,7 +1696,13 @@ export type InboundEvent =
       render_as?: "text";
       reply_to?: string;
       media?: string[];
-      media_urls?: Array<{ url: string; name?: string; kind?: UIMediaKind }>;
+      media_urls?: Array<{
+        url?: string;
+        name?: string;
+        kind?: UIMediaKind;
+        managed_id?: string;
+        deleted?: boolean;
+      }>;
       tool_events?: ToolProgressEvent[];
       /** Oversized persisted activity detail, fetched only when the trace is expanded. */
       trace_detail?: UITraceDetail;
@@ -1645,6 +1740,13 @@ export type InboundEvent =
       chat_id: string;
       stream_id?: string;
       text?: string;
+      media_urls?: Array<{
+        kind?: UIMediaKind;
+        url?: string;
+        name?: string;
+        managed_id?: string;
+        deleted?: boolean;
+      }>;
       /** Inclusive first turn sequence covered by this stream's cumulative text. */
       text_from_seq?: number;
       /** Lightweight provenance for proactive streamed assistant messages. */

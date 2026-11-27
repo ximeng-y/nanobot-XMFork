@@ -100,6 +100,7 @@ def _mk_loop() -> AgentLoop:
     from nanobot.config.schema import AgentDefaults
 
     loop.max_tool_result_chars = AgentDefaults().max_tool_result_chars
+    loop.attachment_service = None
     return loop
 
 

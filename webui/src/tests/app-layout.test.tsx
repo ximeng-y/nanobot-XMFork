@@ -2690,6 +2690,8 @@ describe("App layout", () => {
     await clickDeleteAction(deleteItem);
     expect(within(sidebar).queryByRole("button", { name: "Review notes" })).not.toBeInTheDocument();
     expect(screen.getByText("Topic will be deleted").closest('[role="status"]')).toHaveTextContent("Review notes");
+    expect(screen.getByText("Topic will be deleted").closest('[role="status"]'))
+      .toHaveTextContent("Unreferenced managed attachments will also be reclaimed");
     expect(deleteChatSpy).not.toHaveBeenCalled();
 
     if (outcome === "undo") fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -2836,7 +2838,7 @@ describe("App layout", () => {
     expect(document.querySelectorAll("[data-toast-tone]")).toHaveLength(1);
     expect(bulkToast).toHaveAttribute("data-toast-timed", "true");
     expect(within(bulkToast).getByText("即将删除会话")).toBeVisible();
-    expect(within(bulkToast).getByText("Second chat")).toBeVisible();
+    expect(within(bulkToast).getByText("Second chat · 无其他引用的托管附件也会一并回收")).toBeVisible();
     expect(within(sidebar).getByRole("button", { name: "First chat" })).toBeVisible();
     expect(within(sidebar).queryByRole("button", { name: "Second chat" })).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(TOAST_ACTION_MS); });

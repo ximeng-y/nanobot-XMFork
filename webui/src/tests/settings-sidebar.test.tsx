@@ -53,6 +53,7 @@ describe("Settings navigation on mobile", () => {
     expect(menu).toHaveAttribute("data-side", "bottom");
     expect(within(menu).getByRole("menuitem", { name: "Models" }))
       .toHaveAttribute("aria-current", "page");
+    expect(within(menu).getByRole("menuitem", { name: "Attachments" })).toBeVisible();
     expect(within(menu).getByRole("menuitem", { name: "Restart" })).toBeVisible();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();

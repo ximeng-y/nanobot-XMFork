@@ -55,10 +55,14 @@ export function toMediaAttachment(media: {
   url?: string;
   name?: string;
   kind?: UIMediaKind;
+  managed_id?: string;
+  deleted?: boolean;
 }): UIMediaAttachment {
   return {
     kind: explicitMediaKind(media) ?? media.kind ?? "file",
     url: media.url,
     name: media.name,
+    managed_id: media.managed_id,
+    deleted: media.deleted,
   };
 }

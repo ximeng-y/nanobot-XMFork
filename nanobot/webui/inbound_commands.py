@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from loguru import logger
@@ -43,7 +44,7 @@ from nanobot.session.webui_turns import (
     register_queued_websocket_turn_if_idle,
 )
 from nanobot.utils.cancellation import shield_and_drain
-from nanobot.utils.helpers import safe_filename
+from nanobot.utils.helpers import detect_image_mime, safe_filename
 from nanobot.utils.prompt_templates import render_template
 from nanobot.webui.attachments import inspect_local_attachment
 from nanobot.webui.cli_apps_api import normalize_cli_app_mentions
@@ -149,6 +150,7 @@ class WebUICommandRouter:
         self._http_router = gateway.http
         self._media = gateway.media
         self._uploads = gateway.uploads
+        self._attachments = gateway.attachments
         self._ingress = gateway.ingress
         self._transcripts = gateway.transcripts
         self._workspaces = gateway.workspaces
@@ -817,6 +819,9 @@ class WebUICommandRouter:
         # Revalidate after all asynchronous scope/hydration work. Commit before
         # persisting paths, with no intervening await, so expiry cannot remove
         # files referenced by the canonical transcript.
+        committed_uploads = []
+        managed_ids: list[str] = []
+        registered_upload_paths: set[str] = set()
         try:
             local = [
                 await asyncio.to_thread(
@@ -836,13 +841,70 @@ class WebUICommandRouter:
             if len(set(media_paths)) != len(media_paths):
                 raise AttachmentUploadError("Duplicate attachment reference")
             if references:
-                self._uploads.store.commit(references, owner=upload_owner)
+                committed_uploads = self._uploads.store.commit_managed(
+                    references, owner=upload_owner,
+                )
+            session_key = webui_session_key(chat_id)
+            if temporary_policy is None:
+                for entry in committed_uploads:
+                    record = self._attachments.register_upload(
+                        entry.path,
+                        name=entry.path.name,
+                        mime=entry.mime,
+                        session_key=session_key,
+                        reservation=entry.managed_reservation,
+                    )
+                    managed_ids.append(record.id)
+                    registered_upload_paths.add(str(entry.path))
+                    if entry.mime.startswith("image/"):
+                        with entry.path.open("rb") as handle:
+                            if detect_image_mime(handle.read(12)) is None:
+                                if entry.snapshot_reservation is not None:
+                                    entry.snapshot_reservation.release()
+                                continue
+                        snapshot = self._attachments.ensure_image_snapshot(
+                            entry.path,
+                            None,
+                            session_key=session_key,
+                            source_attachment_id=record.id,
+                            reservation=entry.snapshot_reservation,
+                        )
+                        managed_ids.append(snapshot.id)
+                for item in local:
+                    if not item["mime"].startswith("image/"):
+                        continue
+                    reservation = self._attachments.reserve_image_snapshot(
+                        item["mime"], item["size"],
+                    )
+                    snapshot = self._attachments.ensure_image_snapshot(
+                        Path(item["path"]),
+                        None,
+                        session_key=session_key,
+                        reservation=reservation,
+                    )
+                    managed_ids.append(snapshot.id)
+            else:
+                for entry in committed_uploads:
+                    if entry.managed_reservation is not None:
+                        entry.managed_reservation.release()
+                    if entry.snapshot_reservation is not None:
+                        entry.snapshot_reservation.release()
         except (ValueError, WebUIFilePreviewError) as exc:
+            for entry in committed_uploads:
+                if entry.managed_reservation is not None:
+                    entry.managed_reservation.release()
+                if entry.snapshot_reservation is not None:
+                    entry.snapshot_reservation.release()
+                if str(entry.path) not in registered_upload_paths:
+                    entry.path.unlink(missing_ok=True)
+            if managed_ids:
+                await asyncio.to_thread(self._attachments.delete, managed_ids)
             await self._transport.webui_send_event(
                 connection, "error", detail="attachment_rejected", reason=str(exc),
                 **rejection_fields,
             )
             return
+        self._attachments.protect_borrowed_sources([Path(item["path"]) for item in local])
         if local:
             metadata[INBOUND_META_LOCAL_MEDIA] = [item["path"] for item in local]
         if temporary_policy is not None:
@@ -916,6 +978,8 @@ class WebUICommandRouter:
                 if len(self._accepted_messages) > 1024:
                     del self._accepted_messages[next(iter(self._accepted_messages))]
         except BaseException:
+            if managed_ids:
+                await asyncio.to_thread(self._attachments.delete, managed_ids)
             await self._workspaces.rollback_scope_admission(
                 chat_id,
                 session_generation,

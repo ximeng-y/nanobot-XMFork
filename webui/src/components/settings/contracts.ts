@@ -7,6 +7,7 @@ export type SettingsSectionKey =
   | "about"
   | "appearance"
   | "notifications"
+  | "attachments"
   | "models"
   | "capabilities"
   | "image"

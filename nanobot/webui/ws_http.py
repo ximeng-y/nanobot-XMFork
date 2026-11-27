@@ -214,8 +214,11 @@ for _ext, _ctype in _MIME_FIXES.items():
 
 if TYPE_CHECKING:
     from nanobot.agent.subagent import SubagentManager
+    from nanobot.attachments.service import AttachmentService
     from nanobot.bus.queue import MessageBus
+    from nanobot.channels.websocket.attachment_http import AttachmentHTTP
     from nanobot.channels.websocket.runtime import WebSocketConfig
+    from nanobot.config.schema import Config
     from nanobot.webui.settings_services import WebUISettingsServices
 
 _API_KEY_RE = re.compile(r"^[A-Za-z0-9_:.-]{1,128}$")
@@ -238,6 +241,19 @@ def _decode_api_key(raw_key: str) -> str | None:
     if _API_KEY_RE.match(key) is None:
         return None
     return key
+
+
+def _attachment_ids(payload: Mapping[str, Any]) -> list[str] | None:
+    raw = payload.get("ids")
+    if not isinstance(raw, list):
+        return None
+    raw_ids = cast(list[object], raw)
+    if len(raw_ids) > 1000:
+        return None
+    ids = [item for item in raw_ids if isinstance(item, str) and item]
+    if len(ids) != len(raw_ids):
+        return None
+    return list(dict.fromkeys(ids))
 
 
 def _default_model_name_from_config(config_path: Path | None = None) -> str | None:
@@ -340,6 +356,8 @@ class GatewayHTTPHandler:
         bus: MessageBus,
         tokens: GatewayTokenStore,
         media: WebUIMediaGateway,
+        attachments: AttachmentService,
+        uploads: AttachmentHTTP,
         ingress: WebUIIngressPolicy,
         workspaces: WebUIWorkspaceController,
         settings: WebUISettingsServices,
@@ -367,6 +385,8 @@ class GatewayHTTPHandler:
         self.bus = bus
         self.tokens = tokens
         self.media = media
+        self.attachments = attachments
+        self.uploads = uploads
         self.ingress = ingress
         self.workspaces = workspaces
         self.settings = settings
@@ -461,6 +481,41 @@ class GatewayHTTPHandler:
                     if not isinstance(key, str) or not key.strip():
                         return MutationResult.failure(400, "missing session key")
                     return await self._handle_session_delete(key, params)
+                if action == "attachments.preview_delete":
+                    ids = _attachment_ids(payload)
+                    if ids is None:
+                        return MutationResult.failure(400, "invalid attachment ids")
+                    preview = await asyncio.to_thread(self.attachments.preview_delete, ids)
+                    return MutationResult.success(preview.payload())
+                if action == "attachments.delete":
+                    ids = _attachment_ids(payload)
+                    if ids is None:
+                        return MutationResult.failure(400, "invalid attachment ids")
+                    deleted = await asyncio.to_thread(self.attachments.delete, ids)
+                    return MutationResult.success(deleted.payload())
+                if action == "attachments.settings.update":
+                    from nanobot.attachments.config import AttachmentStorageConfig
+
+                    try:
+                        updated = AttachmentStorageConfig.model_validate(payload)
+                    except ValueError as exc:
+                        return MutationResult.failure(400, str(exc))
+
+                    def save(config: Config) -> AttachmentStorageConfig:
+                        config.attachments = updated
+                        return updated
+
+                    saved = await asyncio.to_thread(self.settings.config.update, save)
+                    self.attachments.update_policy(
+                        max_bytes=saved.max_bytes,
+                        auto_cleanup=saved.auto_cleanup,
+                        orphan_days=saved.orphan_days,
+                    )
+                    result = await asyncio.to_thread(
+                        self.attachments.management_payload,
+                        pending_bytes=self.uploads.store.pending_bytes,
+                    )
+                    return MutationResult.success(result)
                 if action in _WEBUI_MUTATION_PATHS:
                     kind, _, operation = action.partition(".")
                     if kind == "remote":
@@ -527,6 +582,14 @@ class GatewayHTTPHandler:
             ])
         if got == "/api/remote-instances":
             return await self._read_remote_instances(connection, request)
+        if got == "/api/attachments/managed":
+            if not self.check_api_token(request):
+                return _http_error(401, "Unauthorized")
+            payload = await asyncio.to_thread(
+                self.attachments.management_payload,
+                pending_bytes=self.uploads.store.pending_bytes,
+            )
+            return _http_json_response(payload, extra_headers=_NO_STORE_HEADERS)
         if self.config.token_issue_path:
             issue_expected = _normalize_config_path(self.config.token_issue_path)
             if got == issue_expected:
@@ -894,9 +957,13 @@ class GatewayHTTPHandler:
             latency_ms=(int(max(0.0, status.finished_at - status.started_at) * 1000)
                         if status.finished_at is not None else None),
             augment_user_media=lambda paths, local: self.media.augment_transcript_user_media(paths, local, session_key=session_key),
-            augment_assistant_media=self.media.augment_transcript_media,
-            augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
-                text, workspace_path=scope.project_path,
+            augment_assistant_media=lambda paths: self.media.augment_transcript_media(
+                paths, session_key=session_key,
+            ),
+            augment_assistant_text=lambda text: self.media.augment_transcript_assistant_text(
+                text,
+                workspace_path=scope.project_path,
+                session_key=session_key,
             ),
         )
         return _http_json_response(data, extra_headers=_NO_STORE_HEADERS)
@@ -1198,10 +1265,13 @@ class GatewayHTTPHandler:
         data = build_webui_thread_response(
             decoded_key, history=history, include_model_requests=include_model_requests,
             augment_user_media=lambda paths, local: self.media.augment_transcript_user_media(paths, local, session_key=decoded_key),
-            augment_assistant_media=self.media.augment_transcript_media,
-            augment_assistant_text=lambda text: self.media.rewrite_local_markdown_images(
+            augment_assistant_media=lambda paths: self.media.augment_transcript_media(
+                paths, session_key=decoded_key,
+            ),
+            augment_assistant_text=lambda text: self.media.augment_transcript_assistant_text(
                 text,
                 workspace_path=scope.project_path,
+                session_key=decoded_key,
             ),
             session_messages_loader=lambda: self._read_session_messages(decoded_key),
             session_version_loader=lambda: self._read_session_version(decoded_key),
@@ -1297,8 +1367,20 @@ class GatewayHTTPHandler:
             await self.discard_session(decoded_key)
         elif self.subagent_manager is not None:
             await self.subagent_manager.cancel_by_session(decoded_key)
-        session_deleted = await self.session_manager.state.delete(decoded_key)
-        return MutationResult.success({"deleted": bool(draft_deleted or session_deleted)})
+        session_deleted, removed = await self.session_manager.state.delete_with_removed(decoded_key)
+        removed.add(decoded_key)
+        attachment_result = await asyncio.to_thread(
+            self.attachments.reclaim_deleted_sessions,
+            removed,
+        )
+        return MutationResult.success({
+            "deleted": bool(draft_deleted or session_deleted),
+            "attachments": {
+                "deleted": list(attachment_result.deleted),
+                "failed": list(attachment_result.failed),
+                "freed_bytes": attachment_result.freed_bytes,
+            },
+        })
 
 
     async def _dispatch_media_routes(self, request: WsRequest, got: str) -> Response | None:

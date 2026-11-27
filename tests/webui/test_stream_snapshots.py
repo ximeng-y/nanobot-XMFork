@@ -26,7 +26,6 @@ def _gateway(history, tmp_path, monkeypatch):
         return path
 
     monkeypatch.setattr("nanobot.webui.media_gateway.get_media_dir", media_dir)
-    monkeypatch.setattr("nanobot.webui.gateway_services.get_media_dir", media_dir)
     bus = MessageBus()
     gateway = build_gateway_services(
         config=WebSocketConfig(), bus=bus, session_manager=history.sessions,
@@ -108,7 +107,7 @@ async def test_signed_snapshots_survive_http_pagination_and_restart_without_rewr
 
     monkeypatch.setattr(transcript, "_MAX_TRANSCRIPT_PAGE_RECORDS", 2)
 
-    async def all_pages(owner):
+    async def all_pages(owner, expected_events=None):
         pages = [await _http_thread(owner, "snapshots")]
         while pages[-1]["page"]["has_more_before"]:
             pages.append(await _http_thread(owner, "snapshots", "?before=" + pages[-1]["page"]["before_cursor"]))
@@ -117,11 +116,12 @@ async def test_signed_snapshots_survive_http_pagination_and_restart_without_rewr
         ranges = [page["page"]["record_range"] for page in pages]
         assert ranges[0]["start"] == 0 and ranges[-1]["end"] == len(stored)
         assert all(left["end"] == right["start"] for left, right in zip(ranges, ranges[1:]))
-        assert [event for page in pages for event in page["events"]] == complete["events"]
+        if expected_events is not None:
+            assert [event for page in pages for event in page["events"]] == expected_events
         assert pages[-1]["completed_turn_ids"] == ["turn-one"]
         return pages
 
-    pages = await all_pages(gateway)
+    pages = await all_pages(gateway, complete["events"])
     assert _stored_records(history.sessions) == records
     await history.sessions.state.aclose()
     restarted_sessions = SessionManager(tmp_path)
@@ -129,6 +129,29 @@ async def test_signed_snapshots_survive_http_pagination_and_restart_without_rewr
         restarted, _ = _gateway(SimpleNamespace(sessions=restarted_sessions), tmp_path, monkeypatch)
         restarted_pages = await all_pages(restarted)
         assert [page["page"] for page in restarted_pages] == [page["page"] for page in pages]
+        old_events = [event for page in pages for event in page["events"]]
+        restarted_events = [event for page in restarted_pages for event in page["events"]]
+        assert [
+            {key: value for key, value in event.items() if key != "text"}
+            for event in restarted_events
+        ] == [
+            {key: value for key, value in event.items() if key != "text"}
+            for event in old_events
+        ]
+        restarted_end = next(
+            event for event in restarted_events
+            if event["event"] == "stream_end" and "/api/media/" in event.get("text", "")
+        )
+        restarted_url = restarted_end["text"].split("(", 1)[1].split(")", 1)[0]
+        restarted_url_parts = restarted_url.split("/")
+        old_url_parts = signed_url.split("/")
+        assert restarted_url != signed_url
+        assert restarted.media.serve_signed_media(
+            old_url_parts[3], old_url_parts[4],
+        ).status_code == 401
+        assert restarted.media.serve_signed_media(
+            restarted_url_parts[3], restarted_url_parts[4],
+        ).status_code == 200
         assert _stored_records(restarted_sessions) == records
     finally:
         await restarted_sessions.state.aclose()

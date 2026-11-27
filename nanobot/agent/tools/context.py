@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from nanobot.agent.tools.exec_session import ExecSessionManager
     from nanobot.agent.tools.file_state import FileStates
     from nanobot.agent.tools.runtime_control import RuntimeControl
+    from nanobot.attachments.service import AttachmentService
     from nanobot.bus.queue import MessageBus
     from nanobot.config.schema import ProvidersConfig, ToolsConfig
     from nanobot.cron.service import CronService
@@ -99,6 +100,7 @@ class ToolContext:
     cron_service: CronService | None = None
     exec_session_manager: ExecSessionManager | None = None
     sessions: SessionManager | None = None
+    attachment_service: AttachmentService | None = None
     file_state_store: FileStates | None = None
     provider_snapshot_loader: Callable[..., ProviderSnapshot] | None = None
     providers_config: ProvidersConfig | None = None

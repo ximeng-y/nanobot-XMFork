@@ -25,6 +25,7 @@ import type {
   UIMessageTurnFields,
 } from "@/lib/thread-event-projection";
 import { formatQuotedUserMessage } from "@/lib/user-message-quote";
+import { toMediaAttachment } from "@/lib/media";
 import { playTurnCompleteSound } from "@/lib/notification-sound";
 import type {
   InboundEvent,
@@ -644,9 +645,10 @@ export function useNanobotStream(
       }
       if (ev.event === "message_accepted") {
         if (ev.media_urls?.length) {
+          const media = ev.media_urls.map((item) => toMediaAttachment(item));
           setMessages((prev) => prev.map((message) => (
             message.role === "user" && message.turnId === ev.turn_id
-              ? { ...message, media: ev.media_urls }
+              ? { ...message, media }
               : message
           )));
         }

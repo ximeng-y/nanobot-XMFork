@@ -2460,6 +2460,11 @@
     "fileEditShowFewerLines": "Mostrar menos linhas",
     "fileEditOpenFile": "Abrir arquivo",
     "fileEditDiffTruncated": "Diferenças truncadas. Abra o arquivo para ver a alteração completa.",
+    "toolDetails": "Detalhes",
+    "toolCallDetails": "Detalhes da chamada {{index}}",
+    "toolArguments": "Argumentos",
+    "toolResult": "Resultado",
+    "toolError": "Erro",
     "usage": {
       "context": "Contexto atual: {{tokens}}{{capacity}}",
       "requests": "{{count}} chamadas nesta rodada"

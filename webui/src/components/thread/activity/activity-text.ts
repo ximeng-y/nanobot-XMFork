@@ -1,5 +1,15 @@
 import type { TFunction } from "i18next";
 
+const SENSITIVE_LONG_OPTION_PATTERN = "--(?:api-?key|access-?token|token|secret|password)";
+const SENSITIVE_LONG_OPTION_VALUE = new RegExp(
+  String.raw`(${SENSITIVE_LONG_OPTION_PATTERN}(?:=|\s+))(?:"[^"]*"|'[^']*'|[^\s]+)`,
+  "gi",
+);
+const SENSITIVE_SHELL_OPTION_ONLY = new RegExp(
+  `^(?:${SENSITIVE_LONG_OPTION_PATTERN}|-u|--(?:proxy-)?user)$`,
+  "i",
+);
+
 export function redactActivityText(value: string): string {
   return value
     .replace(/(https?:\/\/)[^/@\s]+@/gi, "$1<redacted>@")
@@ -9,7 +19,7 @@ export function redactActivityText(value: string): string {
       "$1$2=<redacted>",
     )
     .replace(
-      /(--(?:api-?key|access-?token|token|secret|password)(?:=|\s+))(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
+      SENSITIVE_LONG_OPTION_VALUE,
       "$1<redacted>",
     )
     .replace(/([?&](?:api_?key|access_?token|token|secret|password)=)[^&\s]+/gi, "$1<redacted>")
@@ -25,6 +35,10 @@ export function redactActivityText(value: string): string {
     .replace(/\bgh[pousr]_[A-Za-z0-9]{12,}\b/g, "<redacted>")
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, "<redacted>")
     .replace(/\b\d{6,12}:[A-Za-z0-9_-]{20,}\b/g, "<redacted>");
+}
+
+export function isSensitiveShellOption(option: string): boolean {
+  return SENSITIVE_SHELL_OPTION_ONLY.test(option.trim());
 }
 
 export function redactShellCommand(command: string): string {

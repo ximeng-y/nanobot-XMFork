@@ -2640,6 +2640,11 @@
     "fileEditShowFewerLines": "Show fewer lines",
     "fileEditOpenFile": "Open file",
     "fileEditDiffTruncated": "Diff truncated. Open the file for the full change.",
+    "toolDetails": "Details",
+    "toolCallDetails": "Call {{index}} details",
+    "toolArguments": "Arguments",
+    "toolResult": "Result",
+    "toolError": "Error",
     "usage": {
       "context": "Context now: {{tokens}}{{capacity}}",
       "requests": "{{count}} calls this turn"

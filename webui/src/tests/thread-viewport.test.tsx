@@ -361,6 +361,49 @@ describe("ThreadViewport", () => {
     expect(takeUserControl).toHaveBeenCalledTimes(1);
   });
 
+  it("yields scroll control before expanding tool details", () => {
+    const takeUserControl = vi.spyOn(ThreadMotionCoordinator.prototype, "takeUserControl");
+    const line = 'third_party_sync({"path":"same.txt"})';
+    render(
+      <ThreadViewport
+        messages={[
+          { id: "reasoning", role: "assistant", content: "", reasoning: "A completed thought", createdAt: 1 },
+          {
+            id: "tool",
+            role: "tool",
+            kind: "trace",
+            content: line,
+            traces: [line],
+            createdAt: 2,
+            toolEvents: [{
+              call_id: "tool-call",
+              name: "third_party_sync",
+              phase: "end",
+              arguments: { path: "same.txt" },
+              result: "completed",
+            }],
+          },
+        ]}
+        isStreaming={false}
+        composer={<div>composer</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
+    const disclosure = screen.getByTestId("tool-call-details-toggle");
+    expect(disclosure).toHaveAttribute("data-thread-disclosure", "");
+    takeUserControl.mockClear();
+
+    fireEvent.pointerDown(disclosure, { button: 0 });
+    expect(takeUserControl).toHaveBeenCalledTimes(1);
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+
+    takeUserControl.mockClear();
+    fireEvent.keyDown(disclosure, { key: "Enter" });
+    expect(takeUserControl).toHaveBeenCalledTimes(1);
+  });
+
   it("yields scroll control before expanding activity from a portaled message menu", () => {
     const takeUserControl = vi.spyOn(ThreadMotionCoordinator.prototype, "takeUserControl");
     render(
@@ -374,7 +417,9 @@ describe("ThreadViewport", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
-    const disclosure = screen.getByRole("button", { name: "Worked" });
+    const menu = document.querySelector<HTMLElement>("[data-message-block-menu]");
+    expect(menu).not.toBeNull();
+    const disclosure = within(menu!).getByRole("button", { name: "Worked" });
     expect(screen.getByTestId("thread-message-region")).not.toContainElement(disclosure);
     takeUserControl.mockClear();
     fireEvent.click(disclosure);

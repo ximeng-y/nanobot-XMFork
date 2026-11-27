@@ -218,6 +218,77 @@ describe("AgentActivityCluster", () => {
     expect(screen.getByRole("button", { name: "Show 6 earlier checks" })).toBeInTheDocument();
   });
 
+  it("keeps open details with their call when a new passive check becomes last", () => {
+    const id = "012345abcdef";
+    const check = (index: number) => ({
+      name: "exec_session",
+      call_id: `check-${index}`,
+      arguments: { session_id: id },
+      phase: "end" as const,
+      result: `Process running. session_id: ${id}\nRuntime remaining: 100.0s\nElapsed: ${index}.0s`,
+    });
+    const view = (count: number) => {
+      const events = Array.from({ length: count }, (_, index) => check(index));
+      const message: UIMessage = {
+        id: "changing-last-check",
+        role: "tool",
+        kind: "trace",
+        content: "exec_session()",
+        traces: events.map((event) => `exec_session(${JSON.stringify(event.arguments)})`),
+        toolEvents: events,
+        createdAt: 1,
+      };
+      return (
+        <ExecSessionCommandsContext.Provider value={new Map([[id, "bun test"]])}>
+          <AgentActivityCluster messages={[message]} isTurnStreaming hasBodyBelow={false} />
+        </ExecSessionCommandsContext.Provider>
+      );
+    };
+
+    const { rerender } = render(view(5));
+    openLiveActivity();
+    const lastToggle = screen.getByTestId("tool-call-details-toggle");
+    fireEvent.click(lastToggle);
+    const lastDetails = screen.getByTestId("tool-call-details");
+    const lastScrollContainer = lastDetails.closest<HTMLElement>(".overflow-y-auto")!;
+    expect(lastDetails).toHaveTextContent("Elapsed: 4.0s");
+    lastToggle.focus();
+    lastScrollContainer.scrollTop = 48;
+
+    rerender(view(6));
+    let toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toBe(lastToggle);
+    expect(lastToggle).toHaveFocus();
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+    const retainedDetails = screen.getByTestId("tool-call-details");
+    expect(retainedDetails).toBe(lastDetails);
+    expect(retainedDetails.closest(".overflow-y-auto")).toBe(lastScrollContainer);
+    expect(lastScrollContainer.scrollTop).toBe(48);
+    expect(retainedDetails).toHaveTextContent("Elapsed: 4.0s");
+    expect(retainedDetails).not.toHaveTextContent("Elapsed: 5.0s");
+
+    fireEvent.click(toggles[0]);
+    toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(1);
+    expect(screen.queryByTestId("tool-call-details")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 earlier checks" }));
+    toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(6);
+    fireEvent.click(toggles[4]);
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide 5 earlier checks" }));
+    expect(screen.getAllByTestId("tool-call-details-toggle")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 earlier checks" }));
+    expect(screen.getAllByTestId("tool-call-details-toggle")).toHaveLength(6);
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+  });
+
   it("shows a generic session label until its source command becomes available", () => {
     const id = "012345abcdef";
     const line = `exec_session(${JSON.stringify({ session_id: id })})`;
@@ -465,6 +536,219 @@ describe("AgentActivityCluster", () => {
     } else {
       expect(onExpandedChange).toHaveBeenCalledWith(false);
     }
+  });
+
+  it("keeps same-parameter calls distinct by call_id and updates an open result in place", () => {
+    const line = 'read_file({"path":"same.txt"})';
+    const message = (firstResult?: string): UIMessage => ({
+      id: "duplicate-calls",
+      role: "tool",
+      kind: "trace",
+      content: line,
+      traces: [line],
+      createdAt: 1,
+      toolEvents: [
+        {
+          call_id: "call-one",
+          name: "read_file",
+          phase: firstResult ? "end" : "start",
+          arguments: { path: "same.txt" },
+          ...(firstResult ? { result: firstResult } : {}),
+        },
+        {
+          call_id: "call-two",
+          name: "read_file",
+          phase: "end",
+          arguments: { path: "same.txt" },
+          result: "second call result",
+        },
+      ],
+    });
+    const { rerender } = render(
+      <AgentActivityCluster
+        messages={[message()]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    const toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(2);
+    fireEvent.click(toggles[0]);
+    const firstDetails = screen.getByTestId("tool-call-details");
+    expect(firstDetails).toHaveTextContent('"path": "same.txt"');
+    expect(firstDetails).not.toHaveTextContent("second call result");
+
+    rerender(
+      <AgentActivityCluster
+        messages={[message("first call result")]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    const updatedDetails = screen.getByTestId("tool-call-details");
+    expect(updatedDetails).toBe(firstDetails);
+    expect(updatedDetails).toHaveTextContent("first call result");
+
+    fireEvent.click(screen.getAllByTestId("tool-call-details-toggle")[1]);
+    expect(screen.getAllByTestId("tool-call-details")[0]).toHaveTextContent("first call result");
+    expect(screen.getAllByTestId("tool-call-details")[1]).toHaveTextContent("second call result");
+  });
+
+  it("formats tool details without clipping and redacts sensitive object keys", () => {
+    const line = 'third_party_sync({"query":"same.txt"})';
+    render(
+      <AgentActivityCluster
+        messages={[{
+          id: "formatted-details",
+          role: "tool",
+          kind: "trace",
+          content: line,
+          traces: [line],
+          createdAt: 1,
+          toolEvents: [{
+            call_id: "formatted-call",
+            name: "third_party_sync",
+            phase: "error",
+            arguments: {
+              text: "first line\nsecond line",
+              enabled: false,
+              count: 0,
+              nested: {
+                password: "do-not-show",
+                headers: {
+                  "X-Auth-Token": "opaque-auth-token",
+                  GITHUB_TOKEN: "opaque-github-token",
+                },
+                service: {
+                  SERVICE_SECRET: "opaque-service-secret",
+                  SERVICE_PASSWORD: "opaque-service-password",
+                  OPENAI_API_KEY: "opaque-openai-key",
+                },
+              },
+              api_key: "do-not-show-either",
+              safe_metadata: { token_count: 4, label: "visible" },
+            },
+            result: false,
+            error: "request failed",
+          }],
+        }]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("tool-call-details-toggle"));
+    const details = screen.getByTestId("tool-call-details");
+    expect(details).toHaveClass("max-h-[min(16rem,50vh)]", "overflow-y-auto", "overscroll-contain");
+    expect(details).toHaveTextContent("first line");
+    expect(details).toHaveTextContent("second line");
+    expect(details).toHaveTextContent('"enabled": false');
+    expect(details).toHaveTextContent('"count": 0');
+    expect(details).toHaveTextContent('"password": "<redacted>"');
+    expect(details).toHaveTextContent('"X-Auth-Token": "<redacted>"');
+    expect(details).toHaveTextContent('"GITHUB_TOKEN": "<redacted>"');
+    expect(details).toHaveTextContent('"SERVICE_SECRET": "<redacted>"');
+    expect(details).toHaveTextContent('"SERVICE_PASSWORD": "<redacted>"');
+    expect(details).toHaveTextContent('"OPENAI_API_KEY": "<redacted>"');
+    expect(details).toHaveTextContent('"api_key": "<redacted>"');
+    expect(details).toHaveTextContent('"token_count": 4');
+    expect(details).toHaveTextContent('"label": "visible"');
+    expect(details).toHaveTextContent("request failed");
+    expect(details).toHaveTextContent("false");
+    expect(details).not.toHaveTextContent(/do-not-show|opaque-/);
+  });
+
+  it("uses command redaction for shell and CLI details", () => {
+    const shellLine = 'exec({"command":"curl -u synthetic-shell-user:synthetic-shell-pass https://example.invalid"})';
+    const sensitiveCliArgs = [
+      ["--proxy-user", "synthetic-cli-user:synthetic-cli-pass"],
+      ["-u", "synthetic-short-user:synthetic-short-pass"],
+      ["--user", "synthetic-user:synthetic-pass"],
+      ["--api-key", "synthetic-api-key-value"],
+      ["--apikey", "synthetic-apikey-value"],
+      ["--access-token", "synthetic-access-token-value"],
+      ["--accesstoken", "synthetic-accesstoken-value"],
+      ["--token", "synthetic-token-value"],
+      ["--secret", "synthetic-secret-value"],
+      ["--password", "synthetic-password-value"],
+    ];
+    const normalCliArgs = ["--output", "report.json", "https://example.invalid"];
+    const cliArgs = [
+      ...sensitiveCliArgs.flat(),
+      "--token=synthetic-inline-token",
+      "-usynthetic-attached-user:synthetic-attached-pass",
+      ...normalCliArgs,
+    ];
+    const cliArguments = { name: "example", args: cliArgs, argv: [...cliArgs] };
+    const cliLine = `run_cli_app(${JSON.stringify(cliArguments)})`;
+    render(
+      <AgentActivityCluster
+        messages={[{
+          id: "redacted-command-details",
+          role: "tool",
+          kind: "trace",
+          content: `${shellLine}\n${cliLine}`,
+          traces: [shellLine, cliLine],
+          createdAt: 1,
+          toolEvents: [
+            {
+              call_id: "shell-call",
+              name: "exec",
+              phase: "end",
+              arguments: {
+                command: "curl -u synthetic-shell-user:synthetic-shell-pass https://example.invalid",
+                nested: {
+                  command: "curl --user synthetic-nested-user:synthetic-nested-pass https://nested.invalid",
+                },
+              },
+              result: {
+                command: "curl --proxy-user synthetic-result-user:synthetic-result-pass https://result.invalid",
+              },
+            },
+            {
+              call_id: "cli-call",
+              name: "run_cli_app",
+              phase: "end",
+              arguments: cliArguments,
+              result: "completed",
+            },
+          ],
+        }]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    for (const toggle of screen.getAllByTestId("tool-call-details-toggle")) {
+      fireEvent.click(toggle);
+    }
+    const detailNodes = screen.getAllByTestId("tool-call-details");
+    const details = detailNodes.map((node) => node.textContent).join("\n");
+    expect(details).toContain("curl -u •••• https://example.invalid");
+    expect(details).toContain("curl --user •••• https://nested.invalid");
+    expect(details).toContain("curl --proxy-user •••• https://result.invalid");
+    expect(details).toContain('"args": [');
+    expect(details).toContain('"argv": [');
+    expect(details).toContain('"••••"');
+    expect(details).not.toMatch(/synthetic-/);
+    const expectedCliArgs = [
+      ...sensitiveCliArgs.flatMap(([option]) => [option, "••••"]),
+      "--token=••••",
+      "-u••••",
+      ...normalCliArgs,
+    ];
+    const cliArgumentText = detailNodes[1].querySelector('[data-tool-detail-section="arguments"] pre')!.textContent!;
+    expect(JSON.parse(cliArgumentText)).toEqual({
+      name: "example",
+      args: expectedCliArgs,
+      argv: expectedCliArgs,
+    });
   });
 
   it("turns the live reasoning marker into an animated check when thinking completes", async () => {
@@ -2371,7 +2655,7 @@ describe("AgentActivityCluster", () => {
     expect(screen.queryByText("missing.png")).not.toBeInTheDocument();
   });
 
-  it("keeps every default activity action on one structural line", () => {
+  it("keeps summary actions on one line while expanded reasoning uses its body", () => {
     render(
       <AgentActivityCluster
         messages={[
@@ -2407,7 +2691,7 @@ describe("AgentActivityCluster", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
 
     const steps = screen.getAllByTestId("activity-step");
-    expect(steps.length).toBeGreaterThanOrEqual(3);
+    expect(steps.length).toBeGreaterThanOrEqual(2);
     for (const step of steps) {
       expect(step).toHaveClass("grid-cols-[1.125rem_minmax(0,1fr)]");
       const line = step.children[1]?.firstElementChild;
@@ -2415,6 +2699,9 @@ describe("AgentActivityCluster", () => {
       expect(line).toHaveClass("whitespace-nowrap");
       expect(step.querySelector("br")).not.toBeInTheDocument();
     }
+    const reasoningBody = screen.getByTestId("reasoning-body");
+    expect(reasoningBody).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(reasoningBody.textContent).toBe("**Planning** the next step\nwithout a nested title");
     expect(document.querySelector("details")).not.toBeInTheDocument();
     expect(document.querySelector("ul, li, section")).not.toBeInTheDocument();
   });

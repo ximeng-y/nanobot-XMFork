@@ -2251,6 +2251,11 @@
     "fileEditShowFewerLines": "收起部分行",
     "fileEditOpenFile": "開啟檔案",
     "fileEditDiffTruncated": "僅顯示部分差異，請開啟檔案查看完整內容。",
+    "toolDetails": "詳情",
+    "toolCallDetails": "第 {{index}} 次呼叫詳情",
+    "toolArguments": "引數",
+    "toolResult": "結果",
+    "toolError": "錯誤",
     "usage": {
       "context": "目前上下文：{{tokens}}{{capacity}} tokens",
       "requests": "{{count}} 次模型請求"

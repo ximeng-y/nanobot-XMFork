@@ -218,6 +218,66 @@ describe("AgentActivityCluster", () => {
     expect(screen.getByRole("button", { name: "Show 6 earlier checks" })).toBeInTheDocument();
   });
 
+  it("keeps open details with their call when a new passive check becomes last", () => {
+    const id = "012345abcdef";
+    const check = (index: number) => ({
+      name: "exec_session",
+      call_id: `check-${index}`,
+      arguments: { session_id: id },
+      phase: "end" as const,
+      result: `Process running. session_id: ${id}\nRuntime remaining: 100.0s\nElapsed: ${index}.0s`,
+    });
+    const view = (count: number) => {
+      const events = Array.from({ length: count }, (_, index) => check(index));
+      const message: UIMessage = {
+        id: "changing-last-check",
+        role: "tool",
+        kind: "trace",
+        content: "exec_session()",
+        traces: events.map((event) => `exec_session(${JSON.stringify(event.arguments)})`),
+        toolEvents: events,
+        createdAt: 1,
+      };
+      return (
+        <ExecSessionCommandsContext.Provider value={new Map([[id, "bun test"]])}>
+          <AgentActivityCluster messages={[message]} isTurnStreaming hasBodyBelow={false} />
+        </ExecSessionCommandsContext.Provider>
+      );
+    };
+
+    const { rerender } = render(view(5));
+    openLiveActivity();
+    fireEvent.click(screen.getByTestId("tool-call-details-toggle"));
+    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
+
+    rerender(view(6));
+    let toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+    expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
+    expect(screen.getByTestId("tool-call-details")).not.toHaveTextContent("Elapsed: 5.0s");
+
+    fireEvent.click(toggles[0]);
+    toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(1);
+    expect(screen.queryByTestId("tool-call-details")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 earlier checks" }));
+    toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(6);
+    fireEvent.click(toggles[4]);
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide 5 earlier checks" }));
+    expect(screen.getAllByTestId("tool-call-details-toggle")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Show 5 earlier checks" }));
+    expect(screen.getAllByTestId("tool-call-details-toggle")).toHaveLength(6);
+    expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
+  });
+
   it("shows a generic session label until its source command becomes available", () => {
     const id = "012345abcdef";
     const line = `exec_session(${JSON.stringify({ session_id: id })})`;
@@ -546,8 +606,20 @@ describe("AgentActivityCluster", () => {
               text: "first line\nsecond line",
               enabled: false,
               count: 0,
-              nested: { password: "do-not-show" },
+              nested: {
+                password: "do-not-show",
+                headers: {
+                  "X-Auth-Token": "opaque-auth-token",
+                  GITHUB_TOKEN: "opaque-github-token",
+                },
+                service: {
+                  SERVICE_SECRET: "opaque-service-secret",
+                  SERVICE_PASSWORD: "opaque-service-password",
+                  OPENAI_API_KEY: "opaque-openai-key",
+                },
+              },
               api_key: "do-not-show-either",
+              safe_metadata: { token_count: 4, label: "visible" },
             },
             result: false,
             error: "request failed",
@@ -567,10 +639,74 @@ describe("AgentActivityCluster", () => {
     expect(details).toHaveTextContent('"enabled": false');
     expect(details).toHaveTextContent('"count": 0');
     expect(details).toHaveTextContent('"password": "<redacted>"');
+    expect(details).toHaveTextContent('"X-Auth-Token": "<redacted>"');
+    expect(details).toHaveTextContent('"GITHUB_TOKEN": "<redacted>"');
+    expect(details).toHaveTextContent('"SERVICE_SECRET": "<redacted>"');
+    expect(details).toHaveTextContent('"SERVICE_PASSWORD": "<redacted>"');
+    expect(details).toHaveTextContent('"OPENAI_API_KEY": "<redacted>"');
     expect(details).toHaveTextContent('"api_key": "<redacted>"');
+    expect(details).toHaveTextContent('"token_count": 4');
+    expect(details).toHaveTextContent('"label": "visible"');
     expect(details).toHaveTextContent("request failed");
     expect(details).toHaveTextContent("false");
-    expect(details).not.toHaveTextContent("do-not-show");
+    expect(details).not.toHaveTextContent(/do-not-show|opaque-/);
+  });
+
+  it("uses command redaction for shell and CLI details", () => {
+    const shellLine = 'exec({"command":"curl -u synthetic-shell-user:synthetic-shell-pass https://example.invalid"})';
+    const cliLine = 'run_cli_app({"name":"example","args":["--proxy-user","synthetic-cli-user:synthetic-cli-pass","https://example.invalid"]})';
+    render(
+      <AgentActivityCluster
+        messages={[{
+          id: "redacted-command-details",
+          role: "tool",
+          kind: "trace",
+          content: `${shellLine}\n${cliLine}`,
+          traces: [shellLine, cliLine],
+          createdAt: 1,
+          toolEvents: [
+            {
+              call_id: "shell-call",
+              name: "exec",
+              phase: "end",
+              arguments: {
+                command: "curl -u synthetic-shell-user:synthetic-shell-pass https://example.invalid",
+                nested: {
+                  command: "curl --user synthetic-nested-user:synthetic-nested-pass https://nested.invalid",
+                },
+              },
+              result: {
+                command: "curl --proxy-user synthetic-result-user:synthetic-result-pass https://result.invalid",
+              },
+            },
+            {
+              call_id: "cli-call",
+              name: "run_cli_app",
+              phase: "end",
+              arguments: {
+                name: "example",
+                args: ["--proxy-user", "synthetic-cli-user:synthetic-cli-pass", "https://example.invalid"],
+              },
+              result: "completed",
+            },
+          ],
+        }]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    for (const toggle of screen.getAllByTestId("tool-call-details-toggle")) {
+      fireEvent.click(toggle);
+    }
+    const details = screen.getAllByTestId("tool-call-details").map((node) => node.textContent).join("\n");
+    expect(details).toContain("curl -u •••• https://example.invalid");
+    expect(details).toContain("curl --user •••• https://nested.invalid");
+    expect(details).toContain("curl --proxy-user •••• https://result.invalid");
+    expect(details).toContain('"args": [');
+    expect(details).toContain('"••••"');
+    expect(details).not.toMatch(/synthetic-/);
   });
 
   it("turns the live reasoning marker into an animated check when thinking completes", async () => {

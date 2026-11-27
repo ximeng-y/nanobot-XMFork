@@ -952,7 +952,29 @@ function ActivityTraceTimeline({
 function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEvent[]; turnActive: boolean }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [detailExpandedByCall, setDetailExpandedByCall] = useState<Set<string>>(() => new Set());
   const earlier = events.slice(0, -1);
+  const earlierRows = earlier.map((event, index) => ({
+    event,
+    key: activityCallKey(event, index),
+  }));
+  const lastIndex = events.length - 1;
+  const last = events[lastIndex];
+  const lastKey = activityCallKey(last, lastIndex);
+  const visibleEarlier = expanded
+    ? earlierRows
+    : earlierRows.filter(({ key }) => detailExpandedByCall.has(key));
+  const setDetailExpanded = (key: string, nextExpanded: boolean) => {
+    setDetailExpandedByCall((current) => {
+      const next = new Set(current);
+      if (nextExpanded) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  };
   return (
     <>
       <button
@@ -963,22 +985,42 @@ function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEve
       >
         {t(`message.agentActivity.${expanded ? "hideEarlierCommandChecks" : "showEarlierCommandChecks"}`, { count: earlier.length })}
       </button>
-      {expanded ? earlier.map((event, index) => (
-        <ExecSessionRow key={event.call_id ?? index} event={event} turnActive={turnActive} />
-      )) : null}
-      <ExecSessionRow event={events[events.length - 1]} turnActive={turnActive} />
+      {visibleEarlier.map(({ event, key }) => (
+        <ExecSessionRow
+          key={key}
+          event={event}
+          turnActive={turnActive}
+          detailsExpanded={detailExpandedByCall.has(key)}
+          onDetailsExpandedChange={(nextExpanded) => setDetailExpanded(key, nextExpanded)}
+        />
+      ))}
+      <ExecSessionRow
+        key={lastKey}
+        event={last}
+        turnActive={turnActive}
+        detailsExpanded={detailExpandedByCall.has(lastKey)}
+        onDetailsExpandedChange={(nextExpanded) => setDetailExpanded(lastKey, nextExpanded)}
+      />
     </>
   );
+}
+
+function activityCallKey(event: ToolProgressEvent, index: number): string {
+  return event.call_id ?? `index:${index}`;
 }
 
 function ExecSessionRow({
   event,
   turnActive,
   showDetails = true,
+  detailsExpanded,
+  onDetailsExpandedChange,
 }: {
   event: ToolProgressEvent;
   turnActive: boolean;
   showDetails?: boolean;
+  detailsExpanded?: boolean;
+  onDetailsExpandedChange?: (expanded: boolean) => void;
 }) {
   const { t } = useTranslation();
   const commands = useContext(ExecSessionCommandsContext);
@@ -993,7 +1035,13 @@ function ExecSessionRow({
         label={formatActivityTarget(t, model.label, model.detail)}
         detail={[model.observation, model.aside].filter(Boolean).join(" · ")}
       />
-      {showDetails ? <ToolCallDetails event={event} /> : null}
+      {showDetails ? (
+        <ToolCallDetails
+          event={event}
+          expanded={detailsExpanded}
+          onExpandedChange={onDetailsExpandedChange}
+        />
+      ) : null}
     </>
   );
 }

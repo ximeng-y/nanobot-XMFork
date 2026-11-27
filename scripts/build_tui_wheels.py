@@ -128,7 +128,7 @@ def release_bundle(tui_dir: Path, target: str, *, root: Path = ROOT) -> dict[str
 def build_wheel(wheel: Path, tui_dir: Path, out_dir: Path, target: str, *,
                 root: Path = ROOT) -> Path:
     """Fail closed on stale sources, damaged archives, or existing output files."""
-    version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     tag = f"py3-none-{PLATFORMS[target]}"
     output = out_dir / f"nanobot_ai-{version}-{tag}.whl"
     if output.exists():

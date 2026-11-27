@@ -646,14 +646,6 @@ const ThreadDisplayUnit = memo(function ThreadDisplayUnit({
   const onBlockActivityExpandedChange = useCallback((expanded: boolean) => {
     if (contextBlockKey !== undefined) {
       onActivityExpandedChange(contextBlockKey, expanded);
-      window.setTimeout(() => {
-        const focusTarget = elementRef.current?.querySelector<HTMLElement>(
-          expanded
-            ? "[data-contextual-activity-collapse]"
-            : "[data-message-block-menu-trigger]",
-        );
-        focusTarget?.focus({ preventScroll: true });
-      }, 0);
     }
   }, [contextBlockKey, onActivityExpandedChange]);
   const activityDurationMs = blockActivity
@@ -667,9 +659,18 @@ const ThreadDisplayUnit = memo(function ThreadDisplayUnit({
         })
     : undefined;
   const onActivityMenuToggle = useCallback(() => {
-    onBlockActivityExpandedChange(!blockActivityExpanded);
+    const expanded = !blockActivityExpanded;
+    onBlockActivityExpandedChange(expanded);
     if (contextBlockKey !== undefined) {
       onContextBlockMenuOpenChange(contextBlockKey, false);
+      window.setTimeout(() => {
+        const focusTarget = elementRef.current?.querySelector<HTMLElement>(
+          expanded
+            ? "[data-contextual-activity-collapse]"
+            : "[data-message-block-menu-trigger]",
+        );
+        focusTarget?.focus({ preventScroll: true });
+      }, 0);
     }
   }, [
     blockActivityExpanded,

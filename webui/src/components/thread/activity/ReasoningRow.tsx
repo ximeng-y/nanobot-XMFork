@@ -11,15 +11,32 @@ export function ReasoningRow({
   text,
   streaming,
   className,
+  expanded = false,
 }: {
   text: string;
   streaming: boolean;
   className?: string;
+  expanded?: boolean;
 }) {
   const { t } = useTranslation();
   const fallback = streaming
     ? t("message.reasoningStreaming", { defaultValue: "Thinking…" })
     : t("message.reasoning", { defaultValue: "Thinking" });
+  if (expanded) {
+    return (
+      <div className={cn("flex min-w-0 items-start gap-1.5", className)}>
+        <span className="mt-0.5 flex h-4 shrink-0 items-center">
+          <ReasoningMarker streaming={streaming} />
+        </span>
+        <div
+          data-testid="reasoning-body"
+          className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] italic leading-5 text-muted-foreground/78"
+        >
+          {text || fallback}
+        </div>
+      </div>
+    );
+  }
   const preview = compactReasoningPreview(text) || fallback;
   // CSS ellipsis still lays out the full string, including the animated copy.
   const truncated = preview.length > 512;
@@ -33,7 +50,6 @@ export function ReasoningRow({
       animateLabel={!truncated}
       tone={streaming ? "active" : "success"}
       label={label}
-      tooltipContent={preview}
       labelClassName="italic text-muted-foreground/78"
       contentClassName="overflow-hidden"
       className={className}

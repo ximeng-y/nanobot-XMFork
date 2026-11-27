@@ -42,6 +42,7 @@ import { ReasoningRow } from "@/components/thread/activity/ReasoningRow";
 import { compactReasoningPreview } from "@/components/thread/activity/reasoning-preview";
 import { describeMcpActivity } from "@/components/thread/activity/mcp-activity-model";
 import { ThinkingReasoningShell } from "@/components/thread/activity/ThinkingReasoningShell";
+import { ToolCallDetails } from "@/components/thread/activity/ToolCallDetails";
 import { WebActivityRow } from "@/components/thread/activity/WebActivityRow";
 import {
   describeTraceLine,
@@ -60,7 +61,7 @@ import { usePageVisibility } from "@/hooks/usePageVisibility";
 import { useThreadVisibility } from "@/hooks/useThreadVisibility";
 import type { FileEditDisplayMode } from "@/lib/local-preferences";
 import { logoFallbackUrls } from "@/lib/provider-brand";
-import { canonicalToolTrace, formatToolCallTrace } from "@/lib/tool-traces";
+import { canonicalToolTrace, formatToolCallTrace, mergeToolProgressEvents } from "@/lib/tool-traces";
 import { cn } from "@/lib/utils";
 import type {
   CliAppInfo,
@@ -412,7 +413,7 @@ function FoldedAgentActivity({
         active={isTurnStreaming}
         expanded={outerExpanded}
         contextual={isCompletedDisclosure}
-        showHeader={!hideHeader || outerExpanded}
+        showHeader={!hideHeader || outerExpanded || expanded !== undefined}
         collapseLabel={t("message.collapseActivity")}
         contentId={detailsId}
         label={activityLabel}
@@ -519,12 +520,12 @@ function latestActivityRow(
     const edit = fileEditsByMessage.get(message.id)?.at(-1);
     if (edit) return <FileEditGroup key={edit.key} edits={[edit]} displayMode="summary" />;
     const entry = activityTraceEntries(message).at(-1);
-    const event = entry?.sessionEvent ?? message.toolEvents?.at(-1);
+    const event = entry?.event ?? message.toolEvents?.at(-1);
     const line = entry?.line ?? formatToolCallTrace(event);
     if (!line?.trim()) continue;
     const traceKey = canonicalToolTrace(line);
     const events = message.toolEvents ?? [];
-    const matchingEvent = entry?.sessionEvent ?? [...events].reverse().find((item) => {
+    const matchingEvent = entry?.event ?? [...events].reverse().find((item) => {
       const trace = formatToolCallTrace(item);
       return trace !== null && canonicalToolTrace(trace) === traceKey;
     });
@@ -536,7 +537,7 @@ function latestActivityRow(
       return <WebSearchActionRow key={key} run={search} turnActive />;
     }
     if (matchingEvent && toolEventName(matchingEvent) === "exec_session") {
-      return <ExecSessionRow key={key} event={matchingEvent} turnActive />;
+      return <ExecSessionRow key={key} event={matchingEvent} turnActive showDetails={false} />;
     }
     const state = genericToolStateByTraceLine(message).get(traceKey);
     const cli = cliRunMapByTraceLine(message).get(traceKey) ?? parseCliRunTrace(line, state?.status);
@@ -545,7 +546,7 @@ function latestActivityRow(
     if (mcp) return <McpRunRow key={key} run={mcp} active preset={mcpPresetsByName.get(mcp.presetName.toLowerCase())} />;
     const trace = parseGenericToolTrace(line);
     if (trace) return <GenericToolRun key={key} items={[{ trace, status: state?.status ?? "running", error: state?.error }]} />;
-    return <ActivityTraceRow key={key} line={line} active state={state} />;
+    return <ActivityTraceRow key={key} line={line} active state={state} showDetails={false} />;
   }
   return null;
 }
@@ -587,6 +588,7 @@ const ActivityMessageTimeline = memo(function ActivityMessageTimeline({
           key={message.id}
           text={message.reasoning ?? ""}
           streaming={active && !!message.reasoningStreaming}
+          expanded
         />,
       );
       return;
@@ -648,56 +650,69 @@ function ActivityModelMessage({
 }
 
 function ActivityTraceList({
-  lines,
+  entries,
   active,
   stateByLine,
 }: {
-  lines: string[];
+  entries: ActivityTraceEntry[];
   active: boolean;
   stateByLine?: Map<string, GenericToolState>;
 }) {
   const items: ReactNode[] = [];
-  let genericItems: GenericToolRunItem[] = [];
+  let genericEntries: Array<{ item: GenericToolRunItem; entry: ActivityTraceEntry; key: string }> = [];
 
-  const flushGenericItems = (suffix: string) => {
-    if (!genericItems.length) return;
+  const flushGenericItems = () => {
+    if (!genericEntries.length) return;
+    const first = genericEntries[0];
     items.push(
-      <GenericToolRun
-        key={`generic-tool:${genericItems[0].trace.groupKey}:${suffix}`}
-        items={genericItems}
-      />,
+      <Fragment key={`generic-tool:${first.item.trace.groupKey}:${first.key}`}>
+        <GenericToolRun items={genericEntries.map(({ item }) => item)} />
+        {genericEntries.map(({ entry, key }, index) => (
+          <ToolCallDetails
+            key={`details:${key}`}
+            event={entry.event}
+            callIndex={index + 1}
+            callCount={genericEntries.length}
+          />
+        ))}
+      </Fragment>,
     );
-    genericItems = [];
+    genericEntries = [];
   };
 
-  lines.forEach((line, index) => {
+  entries.forEach((entry, index) => {
+    const { line, event } = entry;
     const trace = parseGenericToolTrace(line);
     if (trace) {
-      const key = canonicalToolTrace(line);
-      const explicitState = stateByLine?.get(key);
-      const fallbackStatus: GenericToolStatus = active && index === lines.length - 1 ? "running" : "done";
+      const traceKey = canonicalToolTrace(line);
+      const explicitState = event
+        ? genericToolStateFromEvent(event, active)
+        : stateByLine?.get(traceKey);
+      const fallbackStatus: GenericToolStatus = active && index === entries.length - 1 ? "running" : "done";
       const item: GenericToolRunItem = {
         trace,
-        status: explicitState?.status === "running" && !active ? "done" : explicitState?.status ?? fallbackStatus,
+        status: explicitState?.status ?? fallbackStatus,
         error: explicitState?.error,
       };
-      const previous = genericItems[genericItems.length - 1];
-      if (previous && !canGroupGenericToolRuns(previous, item)) flushGenericItems(String(index));
-      genericItems.push(item);
+      const previous = genericEntries[genericEntries.length - 1];
+      if (previous && !canGroupGenericToolRuns(previous.item, item)) flushGenericItems();
+      genericEntries.push({ item, entry, key: entry.key });
       return;
     }
 
-    flushGenericItems(String(index));
+    flushGenericItems();
+    const traceKey = canonicalToolTrace(line);
     items.push(
       <ActivityTraceRow
-        key={`${line}-${index}`}
+        key={entry.key}
         line={line}
-        active={active && index === lines.length - 1}
-        state={stateByLine?.get(canonicalToolTrace(line))}
+        active={active && index === entries.length - 1}
+        state={event ? genericToolStateFromEvent(event, active) : stateByLine?.get(traceKey)}
+        event={event}
       />,
     );
   });
-  flushGenericItems("tail");
+  flushGenericItems();
 
   return (
     <>
@@ -707,8 +722,9 @@ function ActivityTraceList({
 }
 
 interface ActivityTraceEntry {
+  key: string;
   line: string;
-  sessionEvent?: ToolProgressEvent;
+  event?: ToolProgressEvent;
   sessionChecks?: ToolProgressEvent[];
 }
 
@@ -719,18 +735,22 @@ function foldSessionChecks(entries: ActivityTraceEntry[]): ActivityTraceEntry[] 
   const result: ActivityTraceEntry[] = [];
   let index = 0;
   while (index < entries.length) {
-    const first = entries[index].sessionEvent;
+    const first = entries[index].event;
     const id = first && passiveRunningCheckSessionId(first);
     let end = index + 1;
     if (id) {
       while (end < entries.length) {
-        const next = entries[end].sessionEvent;
+        const next = entries[end].event;
         if (!next || passiveRunningCheckSessionId(next) !== id) break;
         end += 1;
       }
     }
     if (id && end - index >= SESSION_CHECK_FOLD_THRESHOLD) {
-      result.push({ line: "", sessionChecks: entries.slice(index, end).map((entry) => entry.sessionEvent!) });
+      result.push({
+        key: `checks:${first.call_id ?? id}`,
+        line: "",
+        sessionChecks: entries.slice(index, end).map((entry) => entry.event!),
+      });
     } else {
       result.push(...entries.slice(index, end));
     }
@@ -739,39 +759,28 @@ function foldSessionChecks(entries: ActivityTraceEntry[]): ActivityTraceEntry[] 
   return result;
 }
 
-/** Restore exec_session call identities lost by display-text deduplication. */
+/** Restore every structured call identity lost by display-text deduplication. */
 function activityTraceEntries(message: UIMessage): ActivityTraceEntry[] {
   const lines = traceLines(message);
-  const events = message.toolEvents ?? [];
-  if (!events.some((event) => toolEventName(event) === "exec_session")) return lines.map((line) => ({ line }));
-  const lineKeys = new Set(lines.map(canonicalToolTrace));
+  const events = mergeToolEventsByCall(message.toolEvents ?? []);
+  const keyCounts = new Map<string, number>();
+  const makeEntry = (line: string, event?: ToolProgressEvent): ActivityTraceEntry => {
+    if (event?.call_id) return { key: `call:${event.call_id}`, line, event };
+    const traceKey = canonicalToolTrace(line);
+    const occurrence = keyCounts.get(traceKey) ?? 0;
+    keyCounts.set(traceKey, occurrence + 1);
+    return { key: `trace:${traceKey}:${occurrence}`, line, event };
+  };
   const eventEntries: ActivityTraceEntry[] = [];
-  const rendered = new Set<string>();
-  const sessionIndices = new Map<string, number>();
   for (const event of events) {
     const line = formatToolCallTrace(event);
     if (!line) continue;
-    const key = canonicalToolTrace(line);
-    if (toolEventName(event) === "exec_session") {
-      const callKey = event.call_id ?? key;
-      const existing = sessionIndices.get(callKey);
-      if (existing !== undefined) {
-        const previous = eventEntries[existing].sessionEvent!;
-        if ((GENERIC_TOOL_STATUS_RANK[phaseStatus(event.phase)]) >= GENERIC_TOOL_STATUS_RANK[phaseStatus(previous.phase)]) {
-          eventEntries[existing] = { line, sessionEvent: { ...previous, ...event } };
-        }
-      } else {
-        sessionIndices.set(callKey, eventEntries.length);
-        eventEntries.push({ line, sessionEvent: event });
-      }
-    } else if (lineKeys.has(key) && !rendered.has(key)) {
-      rendered.add(key);
-      eventEntries.push({ line });
-    }
+    if (message.fileEdits?.length && isFileEditTraceLine(line)) continue;
+    eventEntries.push(makeEntry(line, event));
   }
+  if (!eventEntries.length) return lines.map((line) => makeEntry(line));
 
-  // Anchor text-only lines before the next matching structured call, or after
-  // all calls when they are at the end. Repeated calls keep their identities.
+  // Anchor text-only lines before the next matching structured call, or after all calls at the end.
   const positions = new Map<string, number[]>();
   eventEntries.forEach((entry, index) => {
     const key = canonicalToolTrace(entry.line);
@@ -780,13 +789,14 @@ function activityTraceEntries(message: UIMessage): ActivityTraceEntry[] {
     positions.set(key, indices);
   });
   const occurrences = new Map<string, number>();
-  const before = new Map<number, string[]>();
-  let pending: string[] = [];
+  const before = new Map<number, ActivityTraceEntry[]>();
+  let pending: ActivityTraceEntry[] = [];
   for (const line of lines) {
+    const entry = makeEntry(line);
     const key = canonicalToolTrace(line);
     const indices = positions.get(key);
     if (!indices?.length) {
-      pending.push(line);
+      pending.push(entry);
       continue;
     }
     const count = occurrences.get(key) ?? 0;
@@ -800,11 +810,19 @@ function activityTraceEntries(message: UIMessage): ActivityTraceEntry[] {
   }
   const result: ActivityTraceEntry[] = [];
   eventEntries.forEach((entry, index) => {
-    for (const line of before.get(index) ?? []) result.push({ line });
+    for (const preceding of before.get(index) ?? []) result.push(preceding);
     result.push(entry);
   });
-  for (const line of pending) result.push({ line });
+  for (const entry of pending) result.push(entry);
   return result;
+}
+
+function mergeToolEventsByCall(events: ToolProgressEvent[]): ToolProgressEvent[] {
+  let merged: ToolProgressEvent[] = [];
+  for (const event of events) {
+    merged = mergeToolProgressEvents(merged, [event]);
+  }
+  return merged;
 }
 
 function phaseStatus(phase: unknown): GenericToolStatus {
@@ -829,121 +847,99 @@ function ActivityTraceTimeline({
   const mcpRunsByLine = mcpRunMapByTraceLine(message);
   const webSearchRunsByLine = webSearchRunsByTraceLine(message.toolEvents ?? []);
   const genericStateByLine = genericToolStateByTraceLine(message);
-  const renderedRunKeys = new Set<string>();
   const items: ReactNode[] = [];
-  let normalLines: string[] = [];
+  let normalEntries: ActivityTraceEntry[] = [];
 
-  const flushNormalLines = (suffix: string) => {
-    if (!normalLines.length) return;
+  const flushNormalEntries = () => {
+    if (!normalEntries.length) return;
     items.push(
       <ActivityTraceList
-        key={`${message.id}:trace:${suffix}`}
-        lines={normalLines}
+        key={`${message.id}:trace:${normalEntries[0].key}`}
+        entries={normalEntries}
         active={active}
         stateByLine={genericStateByLine}
       />,
     );
-    normalLines = [];
+    normalEntries = [];
   };
 
-  entries.forEach(({ line, sessionEvent, sessionChecks }, index) => {
+  entries.forEach((entry, index) => {
+    const { line, sessionChecks } = entry;
     if (sessionChecks) {
-      flushNormalLines(String(index));
+      flushNormalEntries();
       items.push(<ExecSessionCheckGroup key={`${message.id}:checks:${sessionChecks[0].call_id ?? index}`} events={sessionChecks} turnActive={turnActive} />);
       return;
     }
-    if (sessionEvent || /^exec_session\(/.test(line.trim())) {
-      flushNormalLines(String(index));
-      let event = sessionEvent;
+    if (entry.event && toolEventName(entry.event) === "exec_session") {
+      flushNormalEntries();
+      items.push(<ExecSessionRow key={`${message.id}:session:${entry.key}`} event={entry.event} turnActive={turnActive} />);
+      return;
+    }
+    if (/^exec_session\(/.test(line.trim())) {
+      flushNormalEntries();
+      let event = entry.event;
       if (!event) {
         const raw = /^exec_session\((.*)\)$/.exec(line.trim())?.[1] ?? "";
         event = { name: "exec_session", arguments: raw, phase: active && index === entries.length - 1 ? "start" : "unknown" };
       }
-      items.push(<ExecSessionRow key={`${message.id}:session:${event.call_id ?? index}`} event={event} turnActive={turnActive} />);
+      items.push(<ExecSessionRow key={`${message.id}:session:${entry.key}`} event={event} turnActive={turnActive} />);
       return;
     }
     const traceKey = canonicalToolTrace(line);
-    const webSearchRun = webSearchRunsByLine.get(traceKey);
+    const webSearchRun = entry.event
+      ? webSearchRunsByTraceLine([entry.event]).values().next().value
+      : webSearchRunsByLine.get(traceKey);
     if (webSearchRun) {
-      flushNormalLines(String(index));
-      renderedRunKeys.add(webSearchRun.key);
+      flushNormalEntries();
       items.push(
-        <WebSearchRun
-          key={`${message.id}:web-search:${webSearchRun.key}:${index}`}
-          run={webSearchRun}
-          turnActive={active}
-        />,
+        <Fragment key={`${message.id}:web-search:${entry.key}`}>
+          <WebSearchRun run={webSearchRun} turnActive={active} />
+          <ToolCallDetails key={`${entry.key}:details`} event={entry.event} />
+        </Fragment>,
       );
       return;
     }
 
-    const cliRun = cliRunsByLine.get(traceKey) ?? parseCliRunTrace(line);
+    const cliRun = (entry.event && cliRunFromEvent(entry.event))
+      || cliRunsByLine.get(traceKey)
+      || parseCliRunTrace(line);
     if (cliRun) {
-      flushNormalLines(String(index));
-      renderedRunKeys.add(cliRun.key);
+      flushNormalEntries();
       items.push(
-        <CliRunGroup
-          key={`${message.id}:cli:${cliRun.key}:${index}`}
-          runs={[cliRun]}
-          active={active}
-          cliAppsByName={cliAppsByName}
-        />,
+        <Fragment key={`${message.id}:cli:${entry.key}`}>
+          <CliRunGroup
+            runs={[cliRun]}
+            active={active}
+            cliAppsByName={cliAppsByName}
+          />
+          <ToolCallDetails key={`${entry.key}:details`} event={entry.event} />
+        </Fragment>,
       );
       return;
     }
 
-    const mcpRun = mcpRunsByLine.get(traceKey) ?? parseMcpRunTrace(line);
+    const mcpRun = (entry.event && mcpRunFromEvent(entry.event))
+      || mcpRunsByLine.get(traceKey)
+      || parseMcpRunTrace(line);
     if (mcpRun) {
-      flushNormalLines(String(index));
-      renderedRunKeys.add(mcpRun.key);
+      flushNormalEntries();
       items.push(
-        <McpRunGroup
-          key={`${message.id}:mcp:${mcpRun.key}:${index}`}
-          runs={[mcpRun]}
-          active={active}
-          mcpPresetsByName={mcpPresetsByName}
-        />,
+        <Fragment key={`${message.id}:mcp:${entry.key}`}>
+          <McpRunGroup
+            runs={[mcpRun]}
+            active={active}
+            mcpPresetsByName={mcpPresetsByName}
+          />
+          <ToolCallDetails key={`${entry.key}:details`} event={entry.event} />
+        </Fragment>,
       );
       return;
     }
 
-    normalLines.push(line);
+    normalEntries.push(entry);
   });
 
-  flushNormalLines("tail");
-
-  for (const run of webSearchRunsByLine.values()) {
-    if (renderedRunKeys.has(run.key)) continue;
-    items.push(
-      <WebSearchRun
-        key={`${message.id}:web-search:${run.key}:event`}
-        run={run}
-        turnActive={active}
-      />,
-    );
-  }
-  for (const run of cliRunsByLine.values()) {
-    if (renderedRunKeys.has(run.key)) continue;
-    items.push(
-      <CliRunGroup
-        key={`${message.id}:cli:${run.key}:event`}
-        runs={[run]}
-        active={active}
-        cliAppsByName={cliAppsByName}
-      />,
-    );
-  }
-  for (const run of mcpRunsByLine.values()) {
-    if (renderedRunKeys.has(run.key)) continue;
-    items.push(
-      <McpRunGroup
-        key={`${message.id}:mcp:${run.key}:event`}
-        runs={[run]}
-        active={active}
-        mcpPresetsByName={mcpPresetsByName}
-      />,
-    );
-  }
+  flushNormalEntries();
 
   if (!items.length) return null;
   return (
@@ -975,19 +971,30 @@ function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEve
   );
 }
 
-function ExecSessionRow({ event, turnActive }: { event: ToolProgressEvent; turnActive: boolean }) {
+function ExecSessionRow({
+  event,
+  turnActive,
+  showDetails = true,
+}: {
+  event: ToolProgressEvent;
+  turnActive: boolean;
+  showDetails?: boolean;
+}) {
   const { t } = useTranslation();
   const commands = useContext(ExecSessionCommandsContext);
   const id = toolEventArguments(event).session_id;
   const model = describeExecSession(event, turnActive, typeof id === "string" ? commands.get(id) : undefined, t);
   return (
-    <ActivityStep
-      icon={Terminal}
-      active={model.active}
-      tone={model.tone}
-      label={formatActivityTarget(t, model.label, model.detail)}
-      detail={[model.observation, model.aside].filter(Boolean).join(" · ")}
-    />
+    <>
+      <ActivityStep
+        icon={Terminal}
+        active={model.active}
+        tone={model.tone}
+        label={formatActivityTarget(t, model.label, model.detail)}
+        detail={[model.observation, model.aside].filter(Boolean).join(" · ")}
+      />
+      {showDetails ? <ToolCallDetails event={event} /> : null}
+    </>
   );
 }
 
@@ -995,10 +1002,14 @@ function ActivityTraceRow({
   line,
   active,
   state,
+  event,
+  showDetails = true,
 }: {
   line: string;
   active: boolean;
   state?: GenericToolState;
+  event?: ToolProgressEvent;
+  showDetails?: boolean;
 }) {
   const { t } = useTranslation();
   const status = state?.status ?? (active ? "running" : "done");
@@ -1013,25 +1024,31 @@ function ActivityTraceRow({
         : Layers);
   if (trace.url && trace.host) {
     return (
-      <WebActivityRow
-        title={trace.label}
-        href={trace.url}
-        host={trace.host}
-        displayUrl={trace.detail}
-        active={rowActive}
-        tone={status === "error" ? "error" : status === "done" ? "success" : "active"}
-      />
+      <>
+        <WebActivityRow
+          title={trace.label}
+          href={trace.url}
+          host={trace.host}
+          displayUrl={trace.detail}
+          active={rowActive}
+          tone={status === "error" ? "error" : status === "done" ? "success" : "active"}
+        />
+        {showDetails ? <ToolCallDetails event={event} /> : null}
+      </>
     );
   }
   return (
-    <ActivityStep
-      icon={Icon}
-      active={rowActive && trace.kind !== "done"}
-      tone={status === "error" ? "error" : status === "done" ? "success" : "active"}
-      label={trace.kind === "search" ? trace.label : formatActivityTarget(t, trace.label, trace.detail)}
-      detail={trace.kind === "search" ? trace.detail : trace.aside}
-      labelClassName={trace.kind === "search" && trace.detail ? "max-w-[50%]" : undefined}
-    />
+    <>
+      <ActivityStep
+        icon={Icon}
+        active={rowActive && trace.kind !== "done"}
+        tone={status === "error" ? "error" : status === "done" ? "success" : "active"}
+        label={trace.kind === "search" ? trace.label : formatActivityTarget(t, trace.label, trace.detail)}
+        detail={trace.kind === "search" ? trace.detail : trace.aside}
+        labelClassName={trace.kind === "search" && trace.detail ? "max-w-[50%]" : undefined}
+      />
+      {showDetails ? <ToolCallDetails event={event} /> : null}
+    </>
   );
 }
 
@@ -1042,6 +1059,15 @@ interface GenericToolState {
 }
 
 const GENERIC_TOOL_STATUS_RANK: Record<GenericToolStatus, number> = { running: 1, done: 2, error: 3 };
+
+function genericToolStateFromEvent(event: ToolProgressEvent, active: boolean): GenericToolState {
+  const status = phaseStatus(event.phase);
+  return {
+    status: status === "running" && !active ? "done" : status,
+    error: status === "error" ? toolProgressError(event.error) : undefined,
+    result: event.result,
+  };
+}
 
 function genericToolStateByTraceLine(message: UIMessage): Map<string, GenericToolState> {
   const map = new Map<string, GenericToolState>();

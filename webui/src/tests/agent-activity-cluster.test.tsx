@@ -467,6 +467,112 @@ describe("AgentActivityCluster", () => {
     }
   });
 
+  it("keeps same-parameter calls distinct by call_id and updates an open result in place", () => {
+    const line = 'read_file({"path":"same.txt"})';
+    const message = (firstResult?: string): UIMessage => ({
+      id: "duplicate-calls",
+      role: "tool",
+      kind: "trace",
+      content: line,
+      traces: [line],
+      createdAt: 1,
+      toolEvents: [
+        {
+          call_id: "call-one",
+          name: "read_file",
+          phase: firstResult ? "end" : "start",
+          arguments: { path: "same.txt" },
+          ...(firstResult ? { result: firstResult } : {}),
+        },
+        {
+          call_id: "call-two",
+          name: "read_file",
+          phase: "end",
+          arguments: { path: "same.txt" },
+          result: "second call result",
+        },
+      ],
+    });
+    const { rerender } = render(
+      <AgentActivityCluster
+        messages={[message()]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    const toggles = screen.getAllByTestId("tool-call-details-toggle");
+    expect(toggles).toHaveLength(2);
+    fireEvent.click(toggles[0]);
+    const firstDetails = screen.getByTestId("tool-call-details");
+    expect(firstDetails).toHaveTextContent('"path": "same.txt"');
+    expect(firstDetails).not.toHaveTextContent("second call result");
+
+    rerender(
+      <AgentActivityCluster
+        messages={[message("first call result")]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    const updatedDetails = screen.getByTestId("tool-call-details");
+    expect(updatedDetails).toBe(firstDetails);
+    expect(updatedDetails).toHaveTextContent("first call result");
+
+    fireEvent.click(screen.getAllByTestId("tool-call-details-toggle")[1]);
+    expect(screen.getAllByTestId("tool-call-details")[0]).toHaveTextContent("first call result");
+    expect(screen.getAllByTestId("tool-call-details")[1]).toHaveTextContent("second call result");
+  });
+
+  it("formats tool details without clipping and redacts sensitive object keys", () => {
+    const line = 'third_party_sync({"query":"same.txt"})';
+    render(
+      <AgentActivityCluster
+        messages={[{
+          id: "formatted-details",
+          role: "tool",
+          kind: "trace",
+          content: line,
+          traces: [line],
+          createdAt: 1,
+          toolEvents: [{
+            call_id: "formatted-call",
+            name: "third_party_sync",
+            phase: "error",
+            arguments: {
+              text: "first line\nsecond line",
+              enabled: false,
+              count: 0,
+              nested: { password: "do-not-show" },
+              api_key: "do-not-show-either",
+            },
+            result: false,
+            error: "request failed",
+          }],
+        }]}
+        isTurnStreaming={false}
+        hasBodyBelow={false}
+        expanded
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("tool-call-details-toggle"));
+    const details = screen.getByTestId("tool-call-details");
+    expect(details).toHaveClass("max-h-[min(16rem,50vh)]", "overflow-y-auto", "overscroll-contain");
+    expect(details).toHaveTextContent("first line");
+    expect(details).toHaveTextContent("second line");
+    expect(details).toHaveTextContent('"enabled": false');
+    expect(details).toHaveTextContent('"count": 0');
+    expect(details).toHaveTextContent('"password": "<redacted>"');
+    expect(details).toHaveTextContent('"api_key": "<redacted>"');
+    expect(details).toHaveTextContent("request failed");
+    expect(details).toHaveTextContent("false");
+    expect(details).not.toHaveTextContent("do-not-show");
+  });
+
   it("turns the live reasoning marker into an animated check when thinking completes", async () => {
     const liveReasoning: UIMessage = {
       id: "r-check",
@@ -2371,7 +2477,7 @@ describe("AgentActivityCluster", () => {
     expect(screen.queryByText("missing.png")).not.toBeInTheDocument();
   });
 
-  it("keeps every default activity action on one structural line", () => {
+  it("keeps summary actions on one line while expanded reasoning uses its body", () => {
     render(
       <AgentActivityCluster
         messages={[
@@ -2407,7 +2513,7 @@ describe("AgentActivityCluster", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
 
     const steps = screen.getAllByTestId("activity-step");
-    expect(steps.length).toBeGreaterThanOrEqual(3);
+    expect(steps.length).toBeGreaterThanOrEqual(2);
     for (const step of steps) {
       expect(step).toHaveClass("grid-cols-[1.125rem_minmax(0,1fr)]");
       const line = step.children[1]?.firstElementChild;
@@ -2415,6 +2521,9 @@ describe("AgentActivityCluster", () => {
       expect(line).toHaveClass("whitespace-nowrap");
       expect(step.querySelector("br")).not.toBeInTheDocument();
     }
+    const reasoningBody = screen.getByTestId("reasoning-body");
+    expect(reasoningBody).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(reasoningBody.textContent).toBe("**Planning** the next step\nwithout a nested title");
     expect(document.querySelector("details")).not.toBeInTheDocument();
     expect(document.querySelector("ul, li, section")).not.toBeInTheDocument();
   });

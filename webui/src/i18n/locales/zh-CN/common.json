@@ -2586,6 +2586,11 @@
     "fileEditShowFewerLines": "收起部分行",
     "fileEditOpenFile": "打开文件",
     "fileEditDiffTruncated": "仅显示部分差异，打开文件可查看完整内容。",
+    "toolDetails": "详情",
+    "toolCallDetails": "第 {{index}} 次调用详情",
+    "toolArguments": "参数",
+    "toolResult": "返回",
+    "toolError": "错误",
     "usage": {
       "context": "当前上下文：{{tokens}}{{capacity}}",
       "requests": "本轮 {{count}} 次模型调用"

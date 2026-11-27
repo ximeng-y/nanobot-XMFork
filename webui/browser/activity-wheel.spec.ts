@@ -121,6 +121,62 @@ test("the narrow preview is a single tappable row and honors reduced motion", as
   await expect(page.getByRole("link", { name: /Planning an overnight rail trip/ })).toBeVisible();
 });
 
+test.describe("narrow tool details", () => {
+  test.use({ viewport: { width: 360, height: 740 }, hasTouch: true });
+
+  test("opens by touch and scrolls inside the tool detail region", async ({ page }) => {
+    await page.getByRole("button", { name: "快速播放" }).tap();
+    await expect(page.getByTestId("latest-activity-wheel")).toContainText(
+      "A better way to travel overnight",
+      { timeout: 2200 },
+    );
+    await page.getByRole("button", { name: "正在处理", exact: true }).tap();
+
+    const toggles = page.getByTestId("tool-call-details-toggle");
+    const finalToggle = toggles.last();
+    await finalToggle.tap();
+    await expect(finalToggle).toHaveAttribute("aria-expanded", "true");
+    const details = page.getByTestId("tool-call-details").last();
+    expect(await details.evaluate((element) => (
+      element.classList.contains("max-h-[min(16rem,50vh)]")
+      && element.classList.contains("overflow-y-auto")
+      && element.classList.contains("overscroll-contain")
+    ))).toBe(true);
+    await expect(details).toContainText("Overnight rail detail 80");
+
+    const metrics = await details.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    }));
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+    expect(metrics.scrollTop).toBe(0);
+
+    await details.scrollIntoViewIfNeeded();
+    const box = (await details.boundingBox())!;
+    const session = await page.context().newCDPSession(page);
+    const x = box.x + box.width / 2;
+    const startY = box.y + box.height - 16;
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y: startY }],
+    });
+    for (let step = 1; step <= 6; step += 1) {
+      await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: startY - step * 40 }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await expect.poll(() => details.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+  });
+});
+
 test("the elapsed label keeps a compact gap before the collapsed activity", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 740 });
   const start = new Date("2026-01-01T00:00:00Z");

@@ -4,32 +4,23 @@ import { expect, it } from "vitest";
 
 import { ReasoningRow } from "@/components/thread/activity/ReasoningRow";
 
-it("shows clipped reasoning in the shared tooltip on hover and keyboard focus", async () => {
+it("keeps the compact preview bounded without exposing hidden reasoning in a tooltip", async () => {
   const user = userEvent.setup();
   const text = 'The user is saying "hi" again. I should respond in Chinese, concisely and in a friendly manner.';
   const { container } = render(<ReasoningRow text={text} streaming={false} />);
   const line = screen.getByTestId("activity-line");
 
-  const clippedLabel = line.querySelector(".truncate") as HTMLElement;
-  Object.defineProperties(clippedLabel, {
-    clientWidth: { value: 100 },
-    scrollWidth: { value: 200 },
-  });
-
   expect(container.querySelector("[title]")).toBeNull();
   await user.hover(line);
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(text);
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   await user.unhover(line);
   await user.tab();
   expect(line).toHaveFocus();
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(text);
-  await user.keyboard("{Escape}");
   expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 });
 
-it("bounds reasoning text without repainting a truncated label and keeps the complete tooltip current", async () => {
-  const user = userEvent.setup();
-  const text = "A long reasoning paragraph. ".repeat(2_000) + "original tail";
+it("bounds the preview and renders the current text as a multiline body when expanded", () => {
+  const text = "A long reasoning paragraph. ".repeat(2_000) + "\noriginal tail";
   const { container, rerender } = render(<ReasoningRow text={text} streaming />);
   const line = screen.getByTestId("activity-line");
 
@@ -38,14 +29,14 @@ it("bounds reasoning text without repainting a truncated label and keeps the com
   expect(screen.getByTestId("activity-reasoning-marker")).toHaveAttribute("data-state", "thinking");
   expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
-  await user.tab();
-  expect(line).toHaveFocus();
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(text);
-  rerender(<ReasoningRow text={text + " latest tail"} streaming />);
-  expect(screen.getByRole("tooltip")).toHaveTextContent(text + " latest tail");
-  await user.keyboard("{Escape}");
+  rerender(<ReasoningRow text={text} streaming expanded />);
+  const body = screen.getByTestId("reasoning-body");
+  expect(body.textContent).toBe(text);
+  expect(body).toHaveClass("whitespace-pre-wrap", "break-words");
+  expect(screen.queryByTestId("activity-line")).not.toBeInTheDocument();
   expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-  expect(line.textContent).toBe(text.slice(0, 512) + "…");
+  rerender(<ReasoningRow text={text + " latest tail"} streaming expanded />);
+  expect(body.textContent).toBe(text + " latest tail");
 });
 
 it("keeps the existing text animation for short active reasoning", () => {

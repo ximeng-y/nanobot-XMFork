@@ -43,6 +43,12 @@ function assistantActionCounts(root: ParentNode = document) {
   return counts;
 }
 
+function inlineActivityDisclosure(root: ParentNode = document): HTMLElement {
+  const disclosure = root.querySelector<HTMLElement>("[data-contextual-activity-disclosure]");
+  expect(disclosure).not.toBeNull();
+  return disclosure!;
+}
+
 function openMessageBlockMenu(root: ParentNode): {
   trigger: HTMLElement;
   menu: HTMLElement;
@@ -124,8 +130,8 @@ describe("ThreadMessages", () => {
           return diff;
         };
         assertIndependentDiff();
-        openAssistantBlockMenu(container);
-        const disclosure = screen.getByRole("button", { name: "Worked for 5s" });
+        const disclosure = inlineActivityDisclosure(container);
+        expect(disclosure).toHaveAccessibleName("Worked for 5s");
         expect(disclosure).toHaveAttribute("aria-expanded", "false");
         const detailsId = disclosure.getAttribute("aria-controls")!;
         expect(container.querySelectorAll(`[id="${detailsId}"]`)).toHaveLength(1);
@@ -515,12 +521,15 @@ describe("ThreadMessages", () => {
       "w-7",
       "rounded-full",
     );
-    expect(screen.queryByRole("button", { name: /worked/i })).not.toBeInTheDocument();
+    const inlineActivity = inlineActivityDisclosure(finalRow);
+    expect(inlineActivity).toHaveAccessibleName(/^Worked/);
+    expect(inlineActivity).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(finalActions);
-    const completedActivity = screen.getByRole("button", { name: /worked/i });
+    const menu = document.querySelector<HTMLElement>('[data-message-block-menu][data-state="open"]')!;
+    const completedActivity = within(menu).getByRole("button", { name: /worked/i });
     expect(completedActivity).toHaveClass("min-h-[var(--message-block-control-size)]");
     expect(completedActivity).toHaveAttribute("aria-expanded", "false");
-    expect(document.querySelectorAll("[data-block-context-rail]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-block-context-rail]")).toHaveLength(1);
   });
 
   it.each([false, true])("ignores an empty answer frame without splitting contiguous activity (streaming=%s)", (isStreaming) => {
@@ -628,13 +637,49 @@ describe("ThreadMessages", () => {
     const okRow = ok.closest<HTMLElement>("[data-thread-display-unit]")!;
     const finalRow = final.closest<HTMLElement>("[data-thread-display-unit]")!;
     openMessageBlockMenu(okRow);
-    expect(screen.getByRole("button", { name: /^worked/i })).toBeInTheDocument();
+    expect(inlineActivityDisclosure(okRow)).toHaveAccessibleName(/^Worked/);
     const { menu } = openMessageBlockMenu(finalRow);
     const finalActivity = menu.querySelector<HTMLElement>("[data-message-block-activity-action]")!;
     expect(finalActivity).toBeInTheDocument();
     fireEvent.click(finalActivity);
     expect(screen.getByTestId("agent-activity-content")).toHaveTextContent("Completed First");
     expect(screen.getByTestId("agent-activity-content")).toHaveTextContent("Completed Second");
+  });
+
+  it("opens completed history directly from its inline activity disclosure", () => {
+    const messages: UIMessage[] = [
+      {
+        id: "history-reasoning",
+        role: "assistant",
+        content: "",
+        reasoning: "checked the previous result",
+        createdAt: 1,
+      },
+      {
+        id: "history-answer",
+        role: "assistant",
+        content: "completed answer",
+        latencyMs: 4_000,
+        createdAt: 2,
+      },
+    ];
+    render(<ThreadMessages messages={messages} isStreaming={false} />);
+    const answerRow = screen.getByText("completed answer")
+      .closest<HTMLElement>("[data-thread-display-unit]")!;
+    const inline = inlineActivityDisclosure(answerRow);
+
+    expect(inline).toHaveAttribute("aria-expanded", "false");
+    inline.focus();
+    fireEvent.click(inline);
+    expect(inline).toHaveAttribute("aria-expanded", "true");
+    expect(inline).toHaveFocus();
+    expect(answerRow.querySelector("[data-testid='agent-activity-content']"))
+      .toHaveTextContent("checked the previous result");
+
+    const { menu } = openMessageBlockMenu(answerRow);
+    const menuActivity = within(menu).getByRole("button", { name: /worked/i });
+    expect(menuActivity).toHaveAttribute("aria-expanded", "true");
+    expect(menuActivity).toHaveAttribute("aria-controls", inline.getAttribute("aria-controls"));
   });
 
   it.each([false, true])("keeps empty frame source counts on the nearest visible unit (streaming=%s)", (isStreaming) => {
@@ -832,7 +877,7 @@ describe("ThreadMessages", () => {
     const answerRow = screen.getByText("final answer")
       .closest<HTMLElement>("[data-thread-display-unit]")!;
     const { trigger, menu } = openMessageBlockMenu(answerRow);
-    const disclosure = screen.getByRole("button", { name: "Worked for 16s" });
+    const disclosure = within(menu).getByRole("button", { name: "Worked for 16s" });
     expect(menu).toHaveFocus();
     expect(menu.querySelector("[data-message-block-copy-action]")).not.toHaveFocus();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
@@ -900,7 +945,7 @@ describe("ThreadMessages", () => {
     expect(screen.queryByTestId("agent-activity-content")).not.toBeInTheDocument();
     expect(answerRow.querySelector("[data-contextual-activity-guide]"))
       .not.toBeInTheDocument();
-    await waitFor(() => expect(trigger).toHaveFocus());
+    await waitFor(() => expect(collapse).toHaveFocus());
   });
 
   it("activates only the hovered visual message block within one logical turn", () => {
@@ -1259,8 +1304,7 @@ describe("ThreadMessages", () => {
       { event: "message", chat_id: "a", turn_id: "turn", text: "Done" },
     ]);
     render(<ThreadMessages messages={messages} />);
-    openAssistantBlockMenu();
-    fireEvent.click(await screen.findByRole("button", { name: /worked/i }));
+    fireEvent.click(inlineActivityDisclosure());
     expect(screen.getByText(/could not create subtask/i)).toBeVisible();
     expect(screen.getByText(/checked subtask/i)).toBeVisible();
     expect(screen.getByText(/ran command/i)).toBeVisible();
@@ -1660,8 +1704,8 @@ describe("ThreadMessages", () => {
       <ThreadMessages messages={messages} isStreaming={false} />,
     );
     expect(screen.queryByRole("button", { name: /^thinking$/i })).not.toBeInTheDocument();
-    openAssistantBlockMenu(container);
-    const disclosure = screen.getByRole("button", { name: "Worked for 9s" });
+    const disclosure = inlineActivityDisclosure(container);
+    expect(disclosure).toHaveAccessibleName("Worked for 9s");
     expect(disclosure).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(disclosure);
     expect(screen.getByTestId("agent-activity-content")).toBeInTheDocument();
@@ -1703,9 +1747,7 @@ describe("ThreadMessages", () => {
     const { container } = render(
       <ThreadMessages messages={messages} isStreaming={false} />,
     );
-    openAssistantBlockMenu(container);
-    expect(screen.getByRole("button", { name: "Worked for 20s" }))
-      .toBeInTheDocument();
+    expect(inlineActivityDisclosure(container)).toHaveAccessibleName("Worked for 20s");
     expect(screen.queryByRole("button", { name: "Worked for 3s" }))
       .not.toBeInTheDocument();
   });
@@ -1805,9 +1847,8 @@ describe("ThreadMessages", () => {
     render(<ThreadMessages messages={messages} isStreaming={false} />);
 
     const answer = screen.getByText("Hong Kong is hot today.");
-    openMessageBlockMenu(answer.closest<HTMLElement>("[data-thread-display-unit]")!);
-    const laterActivity = screen.getAllByRole("button", { name: /worked/i }).at(-1);
-    expect(laterActivity).toBeTruthy();
+    const { menu } = openMessageBlockMenu(answer.closest<HTMLElement>("[data-thread-display-unit]")!);
+    const laterActivity = within(menu).getByRole("button", { name: /worked/i });
     expect(laterActivity).toHaveAttribute("data-message-block-activity-action", "true");
   });
 
@@ -1848,8 +1889,8 @@ describe("ThreadMessages", () => {
     render(<ThreadMessages messages={messages} isStreaming={false} />);
 
     const answer = screen.getByText("知道，IEM Cologne Major 2026 今天开打了。");
-    openMessageBlockMenu(answer.closest<HTMLElement>("[data-thread-display-unit]")!);
-    const activities = screen.getAllByRole("button", { name: /worked/i });
+    const { menu } = openMessageBlockMenu(answer.closest<HTMLElement>("[data-thread-display-unit]")!);
+    const activities = within(menu).getAllByRole("button", { name: /worked/i });
     expect(activities).toHaveLength(1);
     expect(activities[0]).toHaveAttribute("data-message-block-activity-action", "true");
   });
@@ -2030,9 +2071,7 @@ describe("ThreadMessages", () => {
       <ThreadMessages messages={messages} isStreaming={false} />,
     );
 
-    openAssistantBlockMenu(container);
-    expect(screen.getByRole("button", { name: "Worked for 15s" }))
-      .toBeInTheDocument();
+    expect(inlineActivityDisclosure(container)).toHaveAccessibleName("Worked for 15s");
     expect(screen.queryByRole("button", { name: "Worked for 0s" }))
       .not.toBeInTheDocument();
   });
@@ -2151,7 +2190,8 @@ describe("ThreadMessages", () => {
     const ownerRow = information.closest<HTMLElement>("[data-thread-display-unit]")!;
     expect(ownerRow).toContainElement(download);
     openAssistantBlockMenu(ownerRow);
-    expect(screen.getByRole("button", { name: "Worked" })).toBeInTheDocument();
+    const menu = document.querySelector<HTMLElement>('[data-message-block-menu][data-state="open"]')!;
+    expect(within(menu).getByRole("button", { name: "Worked" })).toBeInTheDocument();
   });
 
   it("hides current turn actions until turn_end", () => {

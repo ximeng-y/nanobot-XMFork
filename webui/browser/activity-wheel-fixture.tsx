@@ -27,7 +27,12 @@ const updates = [
   results,
   ...["www.bbc.com", "www.nationalgeographic.com", "www.theguardian.com"].map((host, index): ToolProgressEvent => ({
     phase: "end", call_id: `page-${index}`, name: "web_fetch", arguments: { url: `https://${host}/travel/trains` },
-    result: { title: ["How to book a sleeper cabin", "The best overnight rail journeys", "A better way to travel overnight"][index] },
+    result: {
+      title: ["How to book a sleeper cabin", "The best overnight rail journeys", "A better way to travel overnight"][index],
+      ...(index === 2 ? {
+        content: Array.from({ length: 80 }, (_, line) => `Overnight rail detail ${line + 1}`).join("\n"),
+      } : {}),
+    },
   })),
 ];
 

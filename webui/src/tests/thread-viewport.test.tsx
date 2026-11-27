@@ -374,7 +374,9 @@ describe("ThreadViewport", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
-    const disclosure = screen.getByRole("button", { name: "Worked" });
+    const menu = document.querySelector<HTMLElement>("[data-message-block-menu]");
+    expect(menu).not.toBeNull();
+    const disclosure = within(menu!).getByRole("button", { name: "Worked" });
     expect(screen.getByTestId("thread-message-region")).not.toContainElement(disclosure);
     takeUserControl.mockClear();
     fireEvent.click(disclosure);

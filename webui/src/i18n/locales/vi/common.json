@@ -2198,6 +2198,11 @@
     "fileEditShowFewerLines": "Hiển thị ít dòng hơn",
     "fileEditOpenFile": "Mở tệp",
     "fileEditDiffTruncated": "Chỉ hiển thị một phần thay đổi. Mở tệp để xem nội dung đầy đủ.",
+    "toolDetails": "Chi tiết",
+    "toolCallDetails": "Chi tiết lần gọi {{index}}",
+    "toolArguments": "Đối số",
+    "toolResult": "Kết quả",
+    "toolError": "Lỗi",
     "usage": {
       "context": "Ngữ cảnh gần nhất: {{tokens}}{{capacity}} token",
       "requests": "{{count}} yêu cầu mô hình"

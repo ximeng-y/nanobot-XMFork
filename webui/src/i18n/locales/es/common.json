@@ -2198,6 +2198,11 @@
     "fileEditShowFewerLines": "Mostrar menos líneas",
     "fileEditOpenFile": "Abrir archivo",
     "fileEditDiffTruncated": "Diferencias truncadas. Abre el archivo para ver el cambio completo.",
+    "toolDetails": "Detalles",
+    "toolCallDetails": "Detalles de la llamada {{index}}",
+    "toolArguments": "Argumentos",
+    "toolResult": "Resultado",
+    "toolError": "Error",
     "usage": {
       "context": "Contexto más reciente: {{tokens}}{{capacity}} tokens",
       "requests": "{{count}} solicitudes al modelo"

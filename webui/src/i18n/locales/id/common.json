@@ -2198,6 +2198,11 @@
     "fileEditShowFewerLines": "Tampilkan lebih sedikit baris",
     "fileEditOpenFile": "Buka file",
     "fileEditDiffTruncated": "Perbedaan dipotong. Buka file untuk melihat perubahan lengkap.",
+    "toolDetails": "Detail",
+    "toolCallDetails": "Detail panggilan {{index}}",
+    "toolArguments": "Argumen",
+    "toolResult": "Hasil",
+    "toolError": "Kesalahan",
     "usage": {
       "context": "Konteks terbaru: {{tokens}}{{capacity}} token",
       "requests": "{{count}} permintaan model"

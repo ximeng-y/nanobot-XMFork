@@ -2198,6 +2198,11 @@
     "fileEditShowFewerLines": "表示行数を減らす",
     "fileEditOpenFile": "ファイルを開く",
     "fileEditDiffTruncated": "差分は切り詰められました。完全な変更はファイルを開いて確認してください。",
+    "toolDetails": "詳細",
+    "toolCallDetails": "呼び出し {{index}} の詳細",
+    "toolArguments": "引数",
+    "toolResult": "結果",
+    "toolError": "エラー",
     "usage": {
       "context": "最新のコンテキスト: {{tokens}}{{capacity}} トークン",
       "requests": "モデルリクエスト {{count}} 回"

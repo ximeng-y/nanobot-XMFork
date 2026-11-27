@@ -5,13 +5,13 @@ import { expect, it, vi } from "vitest";
 import { ModelOptionsControl } from "@/components/thread/ModelOptionsControl";
 import type { SessionModelOptions } from "@/lib/types";
 
-function Control({ fast = true, defaultEffort = "medium", onChange }: {
+function Control({ fast = true, defaultEffort = "medium", efforts = ["low", "medium", "high"], onChange }: {
   fast?: boolean;
   defaultEffort?: string | null;
+  efforts?: string[];
   onChange?: (value: SessionModelOptions) => void;
 }) {
   const [value, setValue] = useState<SessionModelOptions>({ reasoning_effort: null, codex_fast_mode: null });
-  const efforts = ["low", "medium", "high"];
   return <ModelOptionsControl data={{ value, efforts, effortsPending: false, capability: {
     reasoning_effort: { default: defaultEffort, values: efforts },
     ...(fast ? { codex_fast_mode: { default: true } } : {}),
@@ -45,17 +45,28 @@ it("lets the model choose the effort when no concrete preset value is known", ()
   expect(onChange).toHaveBeenLastCalledWith({ reasoning_effort: null, codex_fast_mode: null });
 });
 
-it("keeps a custom preset effort selectable without giving it a position on the scale", () => {
+it("keeps a custom preset effort selectable on the same slider and submits the real value", () => {
   const onChange = vi.fn();
   render(<Control defaultEffort="extended" onChange={onChange} />);
-  const effort = screen.getByRole("combobox", { name: "Reasoning effort" });
-  expect(effort).toHaveTextContent("extended");
-  fireEvent.keyDown(effort, { key: "Enter" });
-  fireEvent.click(screen.getByRole("option", { name: "medium" }));
-  expect(effort).toHaveTextContent("medium");
-  fireEvent.keyDown(effort, { key: "Enter" });
-  fireEvent.click(screen.getByRole("option", { name: "extended" }));
+  const effort = screen.getByRole("slider", { name: "Reasoning effort" });
+  expect(effort).toHaveAttribute("aria-valuetext", "extended");
+  fireEvent.change(effort, { target: { value: "1" } });
+  expect(effort).toHaveAttribute("aria-valuetext", "medium");
+  fireEvent.change(effort, { target: { value: "3" } });
   expect(onChange).toHaveBeenLastCalledWith({ reasoning_effort: "extended", codex_fast_mode: null });
+});
+
+it("shows one fixed tick instead of a fake slider when only one effort is selectable", () => {
+  const { container } = render(<Control defaultEffort="none" efforts={["none"]} />);
+  expect(screen.queryByRole("slider", { name: "Reasoning effort" })).not.toBeInTheDocument();
+  expect(screen.getByText("Off")).toBeVisible();
+  expect(container.querySelector(".reasoning-effort-single-mark .reasoning-effort-tick")).toBeVisible();
+});
+
+it("hides reasoning controls for an explicit empty list without affecting Fast", () => {
+  render(<Control defaultEffort={null} efforts={[]} />);
+  expect(screen.queryByRole("slider", { name: "Reasoning effort" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Fast" })).toBeVisible();
 });
 
 it("uses the capability description rather than the provider name to expose Fast mode", () => {

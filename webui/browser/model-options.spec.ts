@@ -255,7 +255,7 @@ for (const { width, height, theme } of [
   { width: 1280, height: 900, theme: "light" },
   { width: 390, height: 440, theme: "dark" },
 ]) {
-  test(`selects a custom preset's reasoning effort in the themed picker at ${width}px`, async ({ page }, testInfo) => {
+  test(`selects a custom preset's reasoning effort on the themed slider at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
     await page.goto(`/browser/fixture.html?case=model-options&group=local&${theme}`);
     // Loading an empty thread moves the composer into the welcome layout.
@@ -264,26 +264,15 @@ for (const { width, height, theme } of [
     const dialog = page.getByRole("dialog", { name: "Switch model", exact: true });
     await dialog.getByRole("option", { name: "Custom API", exact: true }).click();
     await page.getByRole("button", { name: "Custom API", exact: true }).click();
-    const effort = dialog.getByRole("combobox", { name: "Reasoning effort" });
-    await expect(effort).toHaveText("extended");
-    await dialog.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
-    await effort.press("Enter");
-    const list = page.getByRole("listbox").filter({ has: page.getByRole("option", { name: "extended", exact: true }) });
-    const current = list.getByRole("option", { name: "extended", exact: true });
-    const low = list.getByRole("option", { name: "low", exact: true });
-    await expect(current).toBeFocused();
-    await expect(current).toHaveAttribute("aria-selected", "true");
-    await expect(low).toBeInViewport({ ratio: 1 });
+    const effort = dialog.getByRole("slider", { name: "Reasoning effort" });
+    await expect(effort).toHaveAttribute("aria-valuetext", "extended");
+    await effort.focus();
+    await effort.press("Home");
+    await expect(effort).toHaveAttribute("aria-valuetext", "low");
     await page.screenshot({ path: testInfo.outputPath(`custom-reasoning-effort-${theme}.png`) });
-    await current.press("Home");
-    await expect(low).toBeFocused();
-    await low.press("Escape");
-    await expect(list).toBeHidden();
-    await expect(effort).toBeFocused();
-    await effort.click();
-    await low.click();
-    await expect(effort).toHaveText("low");
-    await effort.press("Escape");
+    await effort.press("End");
+    await expect(effort).toHaveAttribute("aria-valuetext", "extended");
+    await effort.press("Home");
     await page.getByLabel("Message input").fill("Review custom API reasoning options");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByLabel("Sent model options")).toHaveText("Reasoning: low; Codex Fast: unchanged");
@@ -314,8 +303,9 @@ test("reopening the model picker keeps focus after the previous picker closes", 
   await dialog.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   await expect(preset).toBeFocused();
   await expect(preset).toHaveAttribute("aria-selected", "true");
-  await dialog.getByRole("combobox", { name: "Reasoning effort" }).press("Enter");
-  await expect(page.getByRole("option", { name: "extended", exact: true })).toBeFocused();
+  const effort = dialog.getByRole("slider", { name: "Reasoning effort" });
+  await effort.press("Home");
+  await expect(effort).toHaveAttribute("aria-valuetext", "low");
 });
 
 test("touch drag previews the next effort without saving it until release", async ({ page }) => {

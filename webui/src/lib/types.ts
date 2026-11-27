@@ -874,6 +874,7 @@ export interface SettingsPayload {
     context_window_tokens: number;
     temperature: number;
     reasoning_effort: string | null;
+    allowed_reasoning_efforts?: string[] | null;
     reasoning_effort_values?: string[];
     codex_fast_mode?: CodexFastMode | null;
     model_options?: ModelOptionsCapability;
@@ -1517,6 +1518,7 @@ export interface ModelConfigurationCreate {
   contextWindowTokens?: number;
   temperature?: number;
   reasoningEffort?: string | null;
+  allowedReasoningEfforts?: string[] | null;
   codexFastMode?: CodexFastMode | null;
   supportsImages?: boolean;
   api?: ModelAPIConfig | null;
@@ -1534,6 +1536,7 @@ export interface ModelConfigurationUpdate {
   contextWindowTokens?: number;
   temperature?: number;
   reasoningEffort?: string | null;
+  allowedReasoningEfforts?: string[] | null;
   codexFastMode?: CodexFastMode | null;
   supportsImages?: boolean;
   api?: ModelAPIConfig | null;

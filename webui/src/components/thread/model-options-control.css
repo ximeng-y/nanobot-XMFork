@@ -25,6 +25,21 @@
   cursor: default;
 }
 
+.reasoning-effort-single-mark {
+  display: flex;
+  flex: none;
+  inline-size: 20px;
+  align-items: center;
+}
+
+.reasoning-effort-single-mark > .reasoning-effort-track {
+  inline-size: 100%;
+}
+
+.reasoning-effort-single-mark .reasoning-effort-tick {
+  inset-inline-start: 50%;
+}
+
 .reasoning-effort-track {
   --effort-lane: #e6e5e6;
   --effort-lane-edge: #dad9da;

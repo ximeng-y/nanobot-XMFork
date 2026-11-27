@@ -44,6 +44,7 @@ import {
   type LocalPreferences,
 } from "@/lib/local-preferences";
 import { isLoopbackHost } from "@/lib/network";
+import { sameReasoningEfforts } from "@/lib/provider-model-catalog";
 import type { SettingsPayload } from "@/lib/types";
 import { useClient } from "@/providers/ClientProvider";
 
@@ -268,6 +269,10 @@ export function useSettingsController({
       form.contextWindowTokens !== normalizeContextWindowTokens(selectedPreset.context_window_tokens) ||
       form.temperature !== selectedPreset.temperature ||
       form.reasoningEffort !== (selectedPreset.reasoning_effort ?? "") ||
+      !sameReasoningEfforts(
+        form.allowedReasoningEfforts,
+        selectedPreset.allowed_reasoning_efforts,
+      ) ||
       form.codexFastMode !== (selectedPreset.codex_fast_mode ?? null) ||
       form.supportsImages !== (selectedPreset.supports_images ?? true) ||
       modelAPISelection(form.api) !== modelAPISelection(selectedPreset.api) ||

@@ -33,6 +33,7 @@ import {
   updateProviderSettings,
 } from "@/lib/api";
 import type { NanobotClient } from "@/lib/nanobot-client";
+import { sameReasoningEfforts } from "@/lib/provider-model-catalog";
 import type {
   ProviderOAuthAuthorizationRequired,
   ProviderOAuthCompletionResult,
@@ -212,6 +213,7 @@ export function useModelSettingsActions({
           contextWindowTokens: form.contextWindowTokens,
           temperature: form.temperature,
           reasoningEffort: form.reasoningEffort || null,
+          allowedReasoningEfforts: form.allowedReasoningEfforts,
           codexFastMode: form.codexFastMode ?? undefined,
           supportsImages: form.supportsImages,
           api: form.api ?? undefined,
@@ -277,6 +279,9 @@ export function useModelSettingsActions({
           form.temperature !== selectedPreset.temperature ? form.temperature : undefined,
         reasoningEffort:
           reasoningEffort !== selectedPreset.reasoning_effort ? reasoningEffort : undefined,
+        allowedReasoningEfforts:
+          sameReasoningEfforts(form.allowedReasoningEfforts, selectedPreset.allowed_reasoning_efforts)
+            ? undefined : form.allowedReasoningEfforts,
         codexFastMode: form.codexFastMode !== (selectedPreset.codex_fast_mode ?? null)
           ? form.codexFastMode : undefined,
         supportsImages: form.supportsImages !== (selectedPreset.supports_images ?? true)
@@ -355,7 +360,8 @@ export function useModelSettingsActions({
         primaryPreset?.context_window_tokens ?? settings.agent.context_window_tokens,
       ),
       temperature: primaryPreset?.temperature ?? settings.agent.temperature,
-      reasoningEffort: primaryPreset?.reasoning_effort ?? settings.agent.reasoning_effort ?? "",
+      reasoningEffort: "high",
+      allowedReasoningEfforts: ["high"],
       codexFastMode: null,
     }));
     setModelPresetCreating(true);

@@ -27,6 +27,8 @@ from nanobot.config.schema import (
     ModelAPIConfig,
     ModelPresetConfig,
     ProviderConfig,
+    normalize_allowed_reasoning_efforts,
+    validate_reasoning_effort_choices,
 )
 from nanobot.providers.image_generation import get_image_gen_provider
 from nanobot.providers.model_options import (
@@ -942,6 +944,31 @@ def _validate_configured_provider(
 _DEFAULT_REASONING_EFFORT_VALUES: tuple[str, ...] = ("", "low", "medium", "high")
 
 
+def _allowed_reasoning_efforts_update(
+    query: QueryParams,
+) -> tuple[bool, list[str] | None]:
+    snake = "allowed_reasoning_efforts"
+    camel = "allowedReasoningEfforts"
+    if snake not in query and camel not in query:
+        return False, None
+    key = snake if snake in query else camel
+    try:
+        normalized = normalize_allowed_reasoning_efforts(parameter_json(query, key))
+    except ValueError as exc:
+        raise WebUISettingsError(str(exc)) from None
+    return True, normalized
+
+
+def _validate_reasoning_effort_pair(
+    reasoning_effort: str | None,
+    allowed_reasoning_efforts: list[str] | None,
+) -> None:
+    try:
+        validate_reasoning_effort_choices(reasoning_effort, allowed_reasoning_efforts)
+    except ValueError as exc:
+        raise WebUISettingsError(str(exc)) from None
+
+
 def reasoning_effort_values_for(provider_name: str, model: str) -> list[str]:
     """Return user-facing reasoning_effort options for this provider+model."""
     spec = find_by_name(provider_name) if provider_name else None
@@ -988,10 +1015,19 @@ class ModelOptionsCapabilities(TypedDict):
 
 def model_options_capabilities(config: Config, preset: ModelPresetConfig) -> ModelOptionsCapabilities:
     provider_name = config.get_provider_name(preset.model, preset=preset) or preset.provider
+    allowed_reasoning_efforts = preset.allowed_reasoning_efforts
     options: ModelOptionsCapabilities = {
         "reasoning_effort": {
             "default": preset.reasoning_effort,
-            "values": [value for value in reasoning_effort_values_for(provider_name, preset.model) if value],
+            "values": (
+                list(allowed_reasoning_efforts)
+                if allowed_reasoning_efforts is not None
+                else [
+                    value
+                    for value in reasoning_effort_values_for(provider_name, preset.model)
+                    if value
+                ]
+            ),
         },
     }
     spec = find_by_name(provider_name)
@@ -1109,6 +1145,7 @@ def model_settings_payload(
                 "temperature": preset.temperature,
                 "supports_images": preset.supports_images,
                 "reasoning_effort": preset.reasoning_effort,
+                "allowed_reasoning_efforts": preset.allowed_reasoning_efforts,
                 "codex_fast_mode": preset.codex_fast_mode,
                 "model_options": model_options_capabilities(config, preset),
                 "api": preset.api.model_dump(mode="json") if preset.api is not None else None,
@@ -1325,6 +1362,16 @@ def create_model_configuration(
         reasoning_effort = (
             query_first_alias(query, "reasoning_effort", "reasoningEffort") or ""
         ).strip() or None
+    has_allowed_reasoning_efforts, allowed_reasoning_efforts = (
+        _allowed_reasoning_efforts_update(query)
+    )
+    explicit_allowed_reasoning_efforts = (
+        allowed_reasoning_efforts if has_allowed_reasoning_efforts else None
+    )
+    _validate_reasoning_effort_pair(
+        reasoning_effort,
+        explicit_allowed_reasoning_efforts,
+    )
     candidate = ModelPresetConfig(
         model=model,
         provider=provider,
@@ -1336,6 +1383,7 @@ def create_model_configuration(
         ),
         temperature=temperature if temperature is not None else base.temperature,
         reasoning_effort=reasoning_effort,
+        allowed_reasoning_efforts=explicit_allowed_reasoning_efforts,
         supports_images=parse_bool(
             query_first_alias(query, "supports_images", "supportsImages") or "true", "supports_images",
         ),
@@ -1361,6 +1409,25 @@ def update_model_configuration(
     preset = config.model_presets.get(name)
     if preset is None:
         raise WebUISettingsError("unknown model configuration")
+
+    has_allowed_reasoning_efforts, allowed_reasoning_efforts_update_value = (
+        _allowed_reasoning_efforts_update(query)
+    )
+    allowed_reasoning_efforts = (
+        allowed_reasoning_efforts_update_value
+        if has_allowed_reasoning_efforts
+        else preset.allowed_reasoning_efforts
+    )
+    has_reasoning_effort = (
+        "reasoning_effort" in query or "reasoningEffort" in query
+    )
+    if has_reasoning_effort:
+        reasoning_effort = (
+            query_first_alias(query, "reasoning_effort", "reasoningEffort") or ""
+        ).strip() or None
+    else:
+        reasoning_effort = preset.reasoning_effort
+    _validate_reasoning_effort_pair(reasoning_effort, allowed_reasoning_efforts)
 
     has_request_settings = preset.codex_fast_mode is not None or any(
         (preset.extra_headers, preset.extra_query, preset.extra_body),
@@ -1423,12 +1490,13 @@ def update_model_configuration(
         preset.temperature = temperature
         changed = True
 
-    if "reasoning_effort" in query or "reasoningEffort" in query:
-        reasoning_effort = (
-            query_first_alias(query, "reasoning_effort", "reasoningEffort") or ""
-        ).strip() or None
+    if has_reasoning_effort:
         if preset.reasoning_effort != reasoning_effort:
             preset.reasoning_effort = reasoning_effort
+            changed = True
+    if has_allowed_reasoning_efforts:
+        if preset.allowed_reasoning_efforts != allowed_reasoning_efforts:
+            preset.allowed_reasoning_efforts = allowed_reasoning_efforts
             changed = True
     if "supports_images" in query or "supportsImages" in query:
         supports_images = parse_bool(

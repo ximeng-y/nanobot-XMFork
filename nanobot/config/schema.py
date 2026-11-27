@@ -164,7 +164,7 @@ def normalize_allowed_reasoning_efforts(value: object) -> list[str] | None:
         raise ValueError("allowed_reasoning_efforts must be a JSON array or null")
 
     efforts: list[str] = []
-    for item in value:
+    for item in cast(list[object], value):
         if not isinstance(item, str):
             raise ValueError("allowed_reasoning_efforts entries must be strings")
         effort = item.strip()

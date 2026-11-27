@@ -389,7 +389,7 @@ describe("ThreadViewport", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Worked" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Worked/ }));
     const disclosure = screen.getByTestId("tool-call-details-toggle");
     expect(disclosure).toHaveAttribute("data-thread-disclosure", "");
     takeUserControl.mockClear();

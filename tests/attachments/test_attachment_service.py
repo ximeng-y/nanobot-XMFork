@@ -14,8 +14,8 @@ from nanobot.attachments.config import AttachmentStorageConfig
 from nanobot.attachments.references import scan_session_references
 from nanobot.attachments.service import AttachmentService
 from nanobot.attachments.store import AttachmentCapacityError
-from nanobot.channels.websocket.attachment_store import AttachmentUploadError
 from nanobot.channels.websocket.attachment_store import AttachmentStore as StagingAttachmentStore
+from nanobot.channels.websocket.attachment_store import AttachmentUploadError
 from nanobot.config.schema import Config
 from nanobot.session.image_attachments import (
     IMAGE_UNAVAILABLE,

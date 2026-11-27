@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { ToolProgressEvent } from "@/lib/types";
 
-import { redactActivityText, redactShellCommand } from "./activity-text";
+import { isSensitiveShellOption, redactActivityText, redactShellCommand } from "./activity-text";
 
 interface ToolCallDetailsProps {
   event?: ToolProgressEvent;
@@ -171,7 +171,6 @@ type ToolDetailRedactionContext = "generic" | "shell" | "cli" | "cliArgs";
 
 const SHELL_TOOL_NAMES = new Set(["exec", "exec_session"]);
 const CLI_TOOL_NAMES = new Set(["run_cli_app", "cli_anything_run"]);
-const AUTH_OPTION_ONLY = /^(?:-u|--(?:proxy-)?user)$/i;
 
 function toolDetailRedactionContext(event: ToolProgressEvent): ToolDetailRedactionContext {
   const name = toolEventName(event);
@@ -271,7 +270,7 @@ function sanitizeCliArguments(value: unknown[], seen: WeakSet<object>): unknown[
       result.push(sanitizeToolDetailValue(item, seen, "shell"));
       continue;
     }
-    if (AUTH_OPTION_ONLY.test(item.trim()) && typeof value[index + 1] === "string") {
+    if (isSensitiveShellOption(item) && typeof value[index + 1] === "string") {
       result.push(redactShellCommand(item));
       result.push("••••");
       index += 1;

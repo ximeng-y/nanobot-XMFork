@@ -964,6 +964,7 @@ function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEve
   const visibleEarlier = expanded
     ? earlierRows
     : earlierRows.filter(({ key }) => detailExpandedByCall.has(key));
+  const visibleRows = [...visibleEarlier, { event: last, key: lastKey }];
   const setDetailExpanded = (key: string, nextExpanded: boolean) => {
     setDetailExpandedByCall((current) => {
       const next = new Set(current);
@@ -985,7 +986,7 @@ function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEve
       >
         {t(`message.agentActivity.${expanded ? "hideEarlierCommandChecks" : "showEarlierCommandChecks"}`, { count: earlier.length })}
       </button>
-      {visibleEarlier.map(({ event, key }) => (
+      {visibleRows.map(({ event, key }) => (
         <ExecSessionRow
           key={key}
           event={event}
@@ -994,13 +995,6 @@ function ExecSessionCheckGroup({ events, turnActive }: { events: ToolProgressEve
           onDetailsExpandedChange={(nextExpanded) => setDetailExpanded(key, nextExpanded)}
         />
       ))}
-      <ExecSessionRow
-        key={lastKey}
-        event={last}
-        turnActive={turnActive}
-        detailsExpanded={detailExpandedByCall.has(lastKey)}
-        onDetailsExpandedChange={(nextExpanded) => setDetailExpanded(lastKey, nextExpanded)}
-      />
     </>
   );
 }

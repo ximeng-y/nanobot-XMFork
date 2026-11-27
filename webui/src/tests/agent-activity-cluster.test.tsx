@@ -247,17 +247,28 @@ describe("AgentActivityCluster", () => {
 
     const { rerender } = render(view(5));
     openLiveActivity();
-    fireEvent.click(screen.getByTestId("tool-call-details-toggle"));
-    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
+    const lastToggle = screen.getByTestId("tool-call-details-toggle");
+    fireEvent.click(lastToggle);
+    const lastDetails = screen.getByTestId("tool-call-details");
+    const lastScrollContainer = lastDetails.closest<HTMLElement>(".overflow-y-auto")!;
+    expect(lastDetails).toHaveTextContent("Elapsed: 4.0s");
+    lastToggle.focus();
+    lastScrollContainer.scrollTop = 48;
 
     rerender(view(6));
     let toggles = screen.getAllByTestId("tool-call-details-toggle");
     expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toBe(lastToggle);
+    expect(lastToggle).toHaveFocus();
     expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
     expect(toggles[1]).toHaveAttribute("aria-expanded", "false");
     expect(screen.getAllByTestId("tool-call-details")).toHaveLength(1);
-    expect(screen.getByTestId("tool-call-details")).toHaveTextContent("Elapsed: 4.0s");
-    expect(screen.getByTestId("tool-call-details")).not.toHaveTextContent("Elapsed: 5.0s");
+    const retainedDetails = screen.getByTestId("tool-call-details");
+    expect(retainedDetails).toBe(lastDetails);
+    expect(retainedDetails.closest(".overflow-y-auto")).toBe(lastScrollContainer);
+    expect(lastScrollContainer.scrollTop).toBe(48);
+    expect(retainedDetails).toHaveTextContent("Elapsed: 4.0s");
+    expect(retainedDetails).not.toHaveTextContent("Elapsed: 5.0s");
 
     fireEvent.click(toggles[0]);
     toggles = screen.getAllByTestId("tool-call-details-toggle");
@@ -654,7 +665,27 @@ describe("AgentActivityCluster", () => {
 
   it("uses command redaction for shell and CLI details", () => {
     const shellLine = 'exec({"command":"curl -u synthetic-shell-user:synthetic-shell-pass https://example.invalid"})';
-    const cliLine = 'run_cli_app({"name":"example","args":["--proxy-user","synthetic-cli-user:synthetic-cli-pass","https://example.invalid"]})';
+    const sensitiveCliArgs = [
+      ["--proxy-user", "synthetic-cli-user:synthetic-cli-pass"],
+      ["-u", "synthetic-short-user:synthetic-short-pass"],
+      ["--user", "synthetic-user:synthetic-pass"],
+      ["--api-key", "synthetic-api-key-value"],
+      ["--apikey", "synthetic-apikey-value"],
+      ["--access-token", "synthetic-access-token-value"],
+      ["--accesstoken", "synthetic-accesstoken-value"],
+      ["--token", "synthetic-token-value"],
+      ["--secret", "synthetic-secret-value"],
+      ["--password", "synthetic-password-value"],
+    ];
+    const normalCliArgs = ["--output", "report.json", "https://example.invalid"];
+    const cliArgs = [
+      ...sensitiveCliArgs.flat(),
+      "--token=synthetic-inline-token",
+      "-usynthetic-attached-user:synthetic-attached-pass",
+      ...normalCliArgs,
+    ];
+    const cliArguments = { name: "example", args: cliArgs, argv: [...cliArgs] };
+    const cliLine = `run_cli_app(${JSON.stringify(cliArguments)})`;
     render(
       <AgentActivityCluster
         messages={[{
@@ -683,10 +714,7 @@ describe("AgentActivityCluster", () => {
               call_id: "cli-call",
               name: "run_cli_app",
               phase: "end",
-              arguments: {
-                name: "example",
-                args: ["--proxy-user", "synthetic-cli-user:synthetic-cli-pass", "https://example.invalid"],
-              },
+              arguments: cliArguments,
               result: "completed",
             },
           ],
@@ -700,13 +728,27 @@ describe("AgentActivityCluster", () => {
     for (const toggle of screen.getAllByTestId("tool-call-details-toggle")) {
       fireEvent.click(toggle);
     }
-    const details = screen.getAllByTestId("tool-call-details").map((node) => node.textContent).join("\n");
+    const detailNodes = screen.getAllByTestId("tool-call-details");
+    const details = detailNodes.map((node) => node.textContent).join("\n");
     expect(details).toContain("curl -u •••• https://example.invalid");
     expect(details).toContain("curl --user •••• https://nested.invalid");
     expect(details).toContain("curl --proxy-user •••• https://result.invalid");
     expect(details).toContain('"args": [');
+    expect(details).toContain('"argv": [');
     expect(details).toContain('"••••"');
     expect(details).not.toMatch(/synthetic-/);
+    const expectedCliArgs = [
+      ...sensitiveCliArgs.flatMap(([option]) => [option, "••••"]),
+      "--token=••••",
+      "-u••••",
+      ...normalCliArgs,
+    ];
+    const cliArgumentText = detailNodes[1].querySelector('[data-tool-detail-section="arguments"] pre')!.textContent!;
+    expect(JSON.parse(cliArgumentText)).toEqual({
+      name: "example",
+      args: expectedCliArgs,
+      argv: expectedCliArgs,
+    });
   });
 
   it("turns the live reasoning marker into an animated check when thinking completes", async () => {

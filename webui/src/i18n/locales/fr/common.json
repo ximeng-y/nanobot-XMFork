@@ -697,7 +697,7 @@
     "appearance": {
       "background": "Image de fond",
       "backgroundChoose": "Choisir une image",
-      "backgroundTooLarge": "L’image ne doit pas dépasser 6 Mio.",
+      "backgroundTooLarge": "L’image ne doit pas dépasser {{max}}.",
       "backgroundFade": "Atténuer le fond",
       "backgroundBlur": "Flou",
       "backgroundReplace": "Changer l’image",
@@ -2105,12 +2105,12 @@
         "unsupported_type": "Type de fichier non pris en charge",
         "empty_file": "Impossible de joindre des fichiers vides",
         "too_many_attachments": "Maximum {{max}} pièces jointes par message",
-        "too_many_videos": "Une seule vidéo par message",
+        "too_many_videos": "Maximum {{max}} vidéos par message",
         "too_many_images": "Maximum {{max}} images par message",
         "magic_mismatch": "Ce fichier n'est pas une image",
         "decode_failed": "Impossible de décoder cette image",
         "too_large": "Le fichier ({{size}}) dépasse la limite d’envoi de {{max}}",
-        "total_too_large": "Les pièces jointes sont trop volumineuses ensemble — supprimez-en ou utilisez des fichiers plus petits",
+        "total_too_large": "Les pièces jointes sont trop volumineuses ensemble (max {{max}}) — supprimez-en ou utilisez des fichiers plus petits",
         "io": "Impossible de lire ce fichier"
       },
       "mentions": {

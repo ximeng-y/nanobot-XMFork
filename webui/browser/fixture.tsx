@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { initializeI18n, setAppLanguage } from "@/i18n";
 import { LOCALE_STORAGE_KEY, normalizeLocale } from "@/i18n/config";
 import { installFocusModality } from "@/lib/focus-modality";
+import { ingressLimitsFixture } from "./ingress-limits-fixture";
 import "../src/globals.css";
 
 installFocusModality();
@@ -19,7 +20,12 @@ async function withClient(fixture: ReactElement, webuiCapabilities?: string[]) {
     import("@/lib/nanobot-client"),
   ]);
   const client = new NanobotClient({ url: "ws://127.0.0.1:8765", reconnect: false });
-  return <ClientProvider client={client} token="fixture" webuiCapabilities={webuiCapabilities}>{fixture}</ClientProvider>;
+  return <ClientProvider
+    client={client}
+    token="fixture"
+    ingressLimits={ingressLimitsFixture}
+    webuiCapabilities={webuiCapabilities}
+  >{fixture}</ClientProvider>;
 }
 
 // Load and install only the selected scene's mocks before i18n and React mount.

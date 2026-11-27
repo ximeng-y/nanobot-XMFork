@@ -118,7 +118,19 @@ export async function uploadAttachments(
       body: new Blob([bytes], { type: match[1] }),
       signal: AbortSignal.timeout(UPLOAD_REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) throw new Error(`Attachment upload failed (${response.status})`);
+    if (!response.ok) {
+      let reason: string | null = null;
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === "object" && "error" in body
+          && typeof body.error === "string" && body.error.trim()) {
+          reason = body.error.trim();
+        }
+      } catch {
+        // 非 JSON 响应继续使用 HTTP 状态作为错误，避免展示整段代理页面。
+      }
+      throw new Error(reason ?? `Attachment upload failed (${response.status})`);
+    }
     const result: unknown = await response.json();
     if (!result || typeof result !== "object" || !("reference" in result)
       || typeof result.reference !== "string") throw new Error("Invalid upload response");

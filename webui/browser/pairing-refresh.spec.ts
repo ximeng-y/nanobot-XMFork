@@ -1,5 +1,7 @@
 import { expect, test, type WebSocketRoute } from "@playwright/test";
 
+import { ingressLimitsFixture } from "./ingress-limits-fixture";
+
 for (const width of [1440, 390]) {
   test(`pairing appears on the real client's event 1s after an empty read at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -12,6 +14,7 @@ for (const width of [1440, 390]) {
     let requests: Record<string, unknown>[] = [];
     await page.route("**/webui/bootstrap*", route => route.fulfill({ json: {
       token: "fixture-token", api_token: "fixture-api-token", ws_path: "/pairing-events-fixture", expires_in: 300,
+      limits: ingressLimitsFixture,
       terminal: { webui: { capabilities: ["webui.core.v1"] } },
     } }));
     await page.route("**/api/**", route => {

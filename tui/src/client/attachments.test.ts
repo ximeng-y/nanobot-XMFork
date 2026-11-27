@@ -34,3 +34,18 @@ test("local paths send zero HTTP bodies; mixed batches upload only the required 
   expect(requests[0]?.url).toBe("http://localhost:1234/api/attachments")
   expect(await requests[0]?.body.text()).toBe("x")
 })
+
+test("uses a JSON gateway reason for upload rejection and keeps the status fallback", async () => {
+  const draft = [{ data_url: "data:text/plain;base64,eA==", name: "note.txt" }]
+  const capability = { path: "/api/attachments", token: "private-capability" }
+  globalThis.fetch = (async () => Response.json({
+    error: "Attachment exceeds the 6 MiB upload limit (7,000,000 bytes)",
+  }, { status: 400 })) as unknown as typeof fetch
+
+  await expect(uploadAttachments(draft, capability, "ws://localhost:1234", () => true))
+    .rejects.toThrow("Attachment exceeds the 6 MiB upload limit")
+
+  globalThis.fetch = (async () => new Response("proxy error", { status: 502 })) as unknown as typeof fetch
+  await expect(uploadAttachments(draft, capability, "ws://localhost:1234", () => true))
+    .rejects.toThrow("502")
+})

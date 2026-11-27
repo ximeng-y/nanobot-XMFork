@@ -1,5 +1,5 @@
 /**
- * Validate image bytes independently of filenames and normalize to TARGET_MAX_BYTES
+ * Validate image bytes independently of filenames and normalize to the supplied budget
  * before base64 encoding. Used by the Worker and the main-thread fallback.
  * Returns {ok: true, dataUrl, bytes, normalized} or {ok: false, reason}.
  */
@@ -10,6 +10,7 @@
 export type EncodeInput = {
   id: string;
   file: File;
+  maxBytes: number;
 };
 
 type EncodeSuccess = {
@@ -34,9 +35,6 @@ export type EncodeFailure = {
 
 export type EncodeResponse = EncodeSuccess | EncodeFailure;
 
-
-/** Encoded image byte budget before base64; the server's supplied ingress limits still apply. */
-export const TARGET_MAX_BYTES = 6 * 1024 * 1024;
 
 /** Long-edge pixel cap when we resize a large image. 2048 keeps retina UIs
  * crisp while bounding decode cost and matching most LLM vision tiers'
@@ -133,6 +131,7 @@ function computeScaledDims(
 async function normalize(
   file: File,
   sourceMime: string,
+  maxBytes: number,
 ): Promise<{ dataUrl: string; bytes: number } | { error: EncodeFailure["reason"] }> {
   const targetMime = NORMALIZE_LOSSY_MIMES.has(sourceMime)
     ? "image/webp"
@@ -157,7 +156,7 @@ async function normalize(
     const options: ImageEncodeOptions = { type: targetMime };
     if (targetMime === "image/webp") options.quality = WEBP_QUALITY;
     const blob = await canvas.convertToBlob(options);
-    if (blob.size > TARGET_MAX_BYTES) {
+    if (blob.size > maxBytes) {
       return { error: "too_large_after_normalize" };
     }
     const buf = await blob.arrayBuffer();
@@ -176,7 +175,7 @@ async function normalize(
 export async function encodeImageInWorker(
   input: EncodeInput,
 ): Promise<EncodeResponse> {
-  const { id, file } = input;
+  const { id, file, maxBytes } = input;
   const origBytes = file.size;
 
   let buffer: ArrayBuffer;
@@ -193,7 +192,7 @@ export async function encodeImageInWorker(
     return { id, ok: false, reason: "invalid_mime" };
   }
 
-  if (origBytes <= TARGET_MAX_BYTES) {
+  if (origBytes <= maxBytes) {
     const dataUrl = `data:${sniffed};base64,${bufferToBase64(buffer)}`;
     return {
       id,
@@ -204,7 +203,7 @@ export async function encodeImageInWorker(
     };
   }
 
-  const result = await normalize(file, sniffed);
+  const result = await normalize(file, sniffed, maxBytes);
   if ("error" in result) {
     return { id, ok: false, reason: result.error };
   }

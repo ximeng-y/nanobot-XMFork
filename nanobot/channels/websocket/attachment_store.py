@@ -15,8 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from nanobot.channels.websocket.attachment_policy import (
+    DEFAULT_MAX_PENDING,
+    DEFAULT_MAX_PENDING_BYTES,
     DOCUMENT_MIME_ALLOWED,
-    MAX_VIDEOS_PER_MESSAGE,
     UPLOAD_IDLE_TIMEOUT_SECONDS,
     UPLOAD_MIME_ALLOWED,
     UPLOAD_TIMEOUT_SECONDS,
@@ -54,8 +55,8 @@ class AttachmentStore:
         media_dir: Path,
         *,
         limits: AttachmentIngressLimits | None = None,
-        max_pending: int = 128,
-        max_pending_bytes: int = 128 * 1024 * 1024,
+        max_pending: int = DEFAULT_MAX_PENDING,
+        max_pending_bytes: int = DEFAULT_MAX_PENDING_BYTES,
         ttl_seconds: float = 600,
         upload_timeout: float = UPLOAD_TIMEOUT_SECONDS,
         upload_idle_timeout: float = UPLOAD_IDLE_TIMEOUT_SECONDS,
@@ -99,9 +100,14 @@ class AttachmentStore:
         except ValueError as exc:
             raise AttachmentUploadError(str(exc)) from exc
         if self._active + len(self._entries) >= self.max_pending:
-            raise AttachmentUploadError("Too many pending attachments")
+            raise AttachmentUploadError(
+                f"Too many pending attachments (maximum {self.max_pending})"
+            )
         if self._reserved_bytes + size > self.max_pending_bytes:
-            raise AttachmentUploadError("Pending attachment storage is full")
+            raise AttachmentUploadError(
+                "Pending attachment storage is full "
+                f"(maximum {self.max_pending_bytes:,} bytes)"
+            )
         self._active += 1
         self._reserved_bytes += size
         path: Path | None = None
@@ -151,24 +157,53 @@ class AttachmentStore:
                     if marker_created:
                         (self._journal / path.name).unlink(missing_ok=True)
 
-    def inspect(self, references: list[str], *, owner: str) -> list[StagedAttachment]:
-        """Validate a complete batch without consuming it, allowing send retries."""
-        self.prune()
-        if len(references) > self.limits.max_count + MAX_VIDEOS_PER_MESSAGE:
-            raise AttachmentUploadError("Too many attachments")
-        if len(set(references)) != len(references):
-            raise AttachmentUploadError("Duplicate attachment reference")
+    def _inspect_owned(
+        self,
+        references: list[str],
+        *,
+        owner: str,
+    ) -> list[StagedAttachment]:
         entries: list[StagedAttachment] = []
         for reference in references:
             entry = self._entries.get(reference)
             if entry is None or not owner or entry.owner != owner:
                 raise AttachmentUploadError("Invalid attachment reference")
             entries.append(entry)
+        return entries
+
+    def _release_committed(self, reference: str) -> None:
+        entry = self._entries[reference]
+        (self._journal / entry.path.name).unlink(missing_ok=True)
+        self._entries.pop(reference)
+        self._reserved_bytes -= entry.size
+
+    def inspect(self, references: list[str], *, owner: str) -> list[StagedAttachment]:
+        """Validate a complete message batch without consuming it."""
+        self.prune()
+        if len(references) > self.limits.max_attachments:
+            raise AttachmentUploadError(
+                f"Too many attachments (maximum {self.limits.max_attachments})"
+            )
+        if len(set(references)) != len(references):
+            raise AttachmentUploadError("Duplicate attachment reference")
+        entries = self._inspect_owned(references, owner=owner)
         try:
             validate_upload_batch([(e.mime, e.size) for e in entries], limits=self.limits)
         except ValueError as exc:
             raise AttachmentUploadError(str(exc)) from exc
         return entries
+
+    def inspect_single(self, reference: str, *, owner: str) -> StagedAttachment:
+        """Validate one non-message file without applying batch total limits."""
+        self.prune()
+        entry = self._inspect_owned([reference], owner=owner)[0]
+        try:
+            if entry.mime not in UPLOAD_MIME_ALLOWED:
+                raise ValueError("Unsupported attachment MIME")
+            validate_upload_size(entry.mime, entry.size, limits=self.limits)
+        except ValueError as exc:
+            raise AttachmentUploadError(str(exc)) from exc
+        return entry
 
     def resolve(self, references: list[str], *, owner: str) -> list[str]:
         return [str(entry.path) for entry in self.inspect(references, owner=owner)]
@@ -181,10 +216,14 @@ class AttachmentStore:
         """
         paths = self.resolve(references, owner=owner)
         for reference in references:
-            entry = self._entries[reference]
-            (self._journal / entry.path.name).unlink(missing_ok=True)
-            self._reserved_bytes -= self._entries.pop(reference).size
+            self._release_committed(reference)
         return paths
+
+    def commit_single(self, reference: str, *, owner: str) -> str:
+        """Transfer one non-message file without applying message batch limits."""
+        entry = self.inspect_single(reference, owner=owner)
+        self._release_committed(reference)
+        return str(entry.path)
 
     def discard_owner(self, owner: str) -> None:
         self.discard([ref for ref, entry in self._entries.items() if entry.owner == owner], owner=owner)

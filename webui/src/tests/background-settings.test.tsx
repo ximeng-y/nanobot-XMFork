@@ -4,6 +4,7 @@ import { BackgroundSettings } from "@/components/settings/overview/BackgroundSet
 
 const background = vi.hoisted(() => ({
   hasBackground: true, image: null as Blob | null, blur: 5, veil: 88, busy: false, ready: true, loadError: false, error: false,
+  uploadError: null as string | null, uploadMaxBytes: 6 * 1024 * 1024 as number | null,
   upload: vi.fn(), remove: vi.fn(), setStyle: vi.fn(), retry: vi.fn(), clearError: vi.fn(),
 }));
 vi.mock("@/providers/BackgroundProvider", () => ({ useBackground: () => background }));
@@ -15,6 +16,8 @@ beforeEach(() => {
   background.blur = 5;
   background.veil = 88;
   background.error = false;
+  background.uploadError = null;
+  background.uploadMaxBytes = 6 * 1024 * 1024;
   background.remove.mockResolvedValue(true);
   background.upload.mockResolvedValue(true);
   background.setStyle.mockResolvedValue(true);
@@ -67,7 +70,7 @@ it("allows saving a valid draft after selecting an oversized image", () => {
   fireEvent.change(screen.getByRole("slider", { name: "Blur" }), { target: { value: "12" } });
   const file = new File([new Uint8Array(6 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
   fireEvent.change(container.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [file] } });
-  expect(screen.getByRole("alert").textContent).toContain("6 MiB");
+  expect(screen.getByRole("alert").textContent).toContain("6.0 MiB");
   expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 });
 
@@ -94,9 +97,67 @@ it("shows a useful error for oversized files before saving", () => {
   fireEvent.click(screen.getByRole("button", { name: "Background" }));
   const file = new File([new Uint8Array(6 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
   fireEvent.change(container.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [file] } });
-  expect(screen.getByRole("alert").textContent).toContain("6 MiB");
+  expect(screen.getByRole("alert").textContent).toContain("6.0 MiB");
   expect(background.upload).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+});
+
+it("uses the gateway per-file limit when it is below the background cap", () => {
+  background.uploadMaxBytes = 5 * 1024 * 1024;
+  const { container } = render(<BackgroundSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Background" }));
+  const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
+  fireEvent.change(container.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+  expect(screen.getByRole("alert").textContent).toContain("5.0 MiB");
+  expect(background.upload).not.toHaveBeenCalled();
+});
+
+it("uses the provider's effective background cap", () => {
+  background.uploadMaxBytes = 6 * 1024 * 1024;
+  const { container } = render(<BackgroundSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Background" }));
+  const file = new File([new Uint8Array(6 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
+  fireEvent.change(container.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [file] } });
+
+  expect(screen.getByRole("alert").textContent).toContain("6.0 MiB");
+  expect(background.upload).not.toHaveBeenCalled();
+});
+
+it("keeps a valid file draft when a later selection is oversized", async () => {
+  const { container } = render(<BackgroundSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Background" }));
+  const picker = container.ownerDocument.querySelector('input[type="file"]')!;
+  const valid = new File(["image"], "valid.png", { type: "image/png" });
+  const oversized = new File([new Uint8Array(6 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
+  fireEvent.change(picker, { target: { files: [valid] } });
+  fireEvent.change(picker, { target: { files: [oversized] } });
+
+  expect(screen.getByRole("alert").textContent).toContain("6.0 MiB");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(background.upload).toHaveBeenCalledWith(valid));
+});
+
+it("rechecks the retained file against a shrunken quota on save", () => {
+  const { container, rerender } = render(<BackgroundSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Background" }));
+  const file = new File([new Uint8Array(5 * 1024 * 1024)], "draft.png", { type: "image/png" });
+  fireEvent.change(container.ownerDocument.querySelector('input[type="file"]')!, { target: { files: [file] } });
+  background.uploadMaxBytes = 4 * 1024 * 1024;
+  rerender(<BackgroundSettings />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(background.upload).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert").textContent).toContain("4.0 MiB");
+});
+
+it("shows the upload failure reason separately from delete and style errors", () => {
+  background.uploadError = "Attachment exceeds the gateway limit";
+  render(<BackgroundSettings />);
+  fireEvent.click(screen.getByRole("button", { name: "Background" }));
+
+  expect(screen.getByText("Attachment exceeds the gateway limit")).toBeInTheDocument();
 });
 
 it("previews background fade and saves it with the blur", async () => {

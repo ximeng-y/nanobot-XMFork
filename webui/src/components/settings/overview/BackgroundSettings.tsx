@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useBackground } from "@/providers/BackgroundProvider";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
+import { formatBytes } from "@/lib/utils";
 
 export function BackgroundSettings() {
   const { t } = useTranslation();
@@ -40,6 +41,10 @@ export function BackgroundSettings() {
     background.clearError();
   };
   const save = async () => {
+    if (file && (background.uploadMaxBytes === null || file.size > background.uploadMaxBytes)) {
+      setFileError(true);
+      return;
+    }
     const imageChanged = !!file || removed;
     const saved = file ? await background.upload(file) : removed ? await background.remove() : true;
     if (!saved) return;
@@ -89,7 +94,10 @@ export function BackgroundSettings() {
           const next = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
           if (next) {
-            if (next.size > 6 * 1024 * 1024) { setFileError(true); return; }
+            if (background.uploadMaxBytes === null || next.size > background.uploadMaxBytes) {
+              setFileError(true);
+              return;
+            }
             setFile(next); setRemoved(false); setFileError(false); setImageSaved(false); background.clearError();
           }
         }} />
@@ -115,7 +123,10 @@ export function BackgroundSettings() {
           <span>{t("settings.status.loadError")}</span>
           <Button type="button" variant="ghost" size="sm" onClick={background.retry}>{t("common.retry")}</Button>
         </div>}
-        {fileError && <p role="alert" className="text-xs text-destructive">{t("settings.appearance.backgroundTooLarge")}</p>}
+        {fileError && <p role="alert" className="text-xs text-destructive">
+          {t("settings.appearance.backgroundTooLarge", { max: formatBytes(background.uploadMaxBytes ?? 0) })}
+        </p>}
+        {background.uploadError && <p role="alert" className="text-xs text-destructive">{background.uploadError}</p>}
         {background.error && <p role="alert" className="text-xs text-destructive">{t(imageSaved ? "settings.appearance.backgroundPartialError" : "settings.appearance.backgroundError")}</p>}
         <DialogFooter className="background-settings-footer">
           {hasPreview && <Button type="button" variant="ghost" size="sm" className="background-settings-remove" disabled={background.busy}

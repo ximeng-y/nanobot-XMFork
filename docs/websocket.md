@@ -267,7 +267,7 @@ Update WebUI and TUI together with the gateway. Existing messages and attachment
 
 Reverse proxies must forward `POST /api/attachments` (including its authorization header) to the gateway and permit the configured file sizes. Same-origin browser uploads include origin cookies for edge authentication; cross-origin uploads do not send cookies. Do not enable public CORS for this capability endpoint.
 
-For a remote host opened through the local WebUI, update the local installation and the remote gateway together to use binary attachments. An older host's text chats and HTTP reads remain available.
+For a remote host opened through the local WebUI, update the local installation and the remote gateway together. Only matching versions are supported and tested; protocol checks do not guarantee cross-version compatibility, and no compatibility fallback is provided.
 
 ## Configuration Reference
 
@@ -283,6 +283,40 @@ All fields go under `channels.websocket` in `config.json`. Unrecognized options 
 | `path` | string | `"/"` | WebSocket upgrade path. Trailing slashes are normalized (root `/` is preserved). |
 | `publicWsUrl` | string | `""` | Exact public `ws://` or `wss://` endpoint returned by `/webui/bootstrap`. Set this when a reverse proxy forwards requests with an origin `Host` header (for example, `wss://claw.example.com/`); its path must match `path`. |
 | `maxMessageBytes` | int | `37748736` | Maximum inbound WebSocket frame size in bytes (1 KB – 40 MB). The existing 36 MB default is retained. HTTP binary attachments do not count toward this limit; a legacy 1 MB setting no longer prevents larger attachments from being sent. |
+
+### Uploads
+
+The optional `uploads` object controls attachment admission. Every field must be a positive integer; zero, negative values, booleans, fractions, and strings are rejected. Omit the object or any individual field to use its default. Restart the gateway after changing these values.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `maxCount` | int | `4` | Maximum non-video attachments per message, including borrowed local file references. |
+| `maxFileBytes` | int | `6291456` | Maximum bytes for each uploaded image or document (6 MiB). |
+| `maxTotalBytes` | int | `25165824` | Maximum combined bytes for non-video uploaded files per message (24 MiB). Videos do not consume this budget. |
+| `maxVideoCount` | int | `1` | Maximum videos per message, including borrowed local video references. |
+| `maxVideoBytes` | int | `20971520` | Maximum bytes for each uploaded video (20 MiB). |
+| `maxPending` | int | `128` | Gateway-wide maximum for active and staged uncommitted uploads. |
+| `maxPendingBytes` | int | `134217728` | Gateway-wide maximum bytes reserved by active and staged uncommitted uploads (128 MiB). |
+
+```json
+{
+  "channels": {
+    "websocket": {
+      "uploads": {
+        "maxCount": 4,
+        "maxFileBytes": 6291456,
+        "maxTotalBytes": 25165824,
+        "maxVideoCount": 1,
+        "maxVideoBytes": 20971520,
+        "maxPending": 128,
+        "maxPendingBytes": 134217728
+      }
+    }
+  }
+}
+```
+
+Count limits cover both uploaded references and borrowed server files. Borrowed files do not consume `maxFileBytes`, `maxTotalBytes`, or `maxVideoBytes` because their bytes are not uploaded. The staging limits reserve capacity for uncommitted uploads across the gateway and are separate from long-term session attachment history and retention. Background images keep an independent 6 MiB input cap; their effective upload limit is the smaller of 6 MiB and `maxFileBytes`.
 
 ### Authentication
 

@@ -81,11 +81,6 @@ import type { ComposerUsageControl } from "@/components/thread/ComposerUsagePopo
 import {
   ACCEPT_ATTR,
   acceptedAttachmentKind,
-  MAX_ATTACHMENTS_PER_MESSAGE,
-  MAX_ATTACHMENT_BYTES,
-  MAX_TOTAL_ATTACHMENT_BYTES,
-  MAX_VIDEO_BYTES,
-  MAX_VIDEOS_PER_MESSAGE,
   useAttachedImages,
   type AttachedImage,
   type AttachmentError,
@@ -125,7 +120,7 @@ import {
   readDraggedSession,
 } from "@/lib/session-drag";
 import { formatQuotedUserMessage } from "@/lib/user-message-quote";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 import type { ComposerDraft, ComposerDraftStore } from "@/lib/composer-draft";
 import { useLocalPreferences } from "@/hooks/useLocalPreferences";
 import {
@@ -135,12 +130,6 @@ import {
   useQueuedPrompt,
   type QueuedPromptContent,
 } from "@/components/thread/useQueuedPrompt";
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MiB`;
-}
 
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;
@@ -539,26 +528,34 @@ export function ThreadComposer({
   const focusTextarea = useCallback(() => {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, []);
-  const maxAttachments = ingressLimits?.attachments.max_count
-    ?? MAX_ATTACHMENTS_PER_MESSAGE;
-  const maxFileBytes = ingressLimits?.attachments.max_file_bytes ?? MAX_ATTACHMENT_BYTES;
+  const attachmentLimits = ingressLimits?.attachments ?? null;
+  const maxAttachments = attachmentLimits?.max_count ?? 0;
+  const maxFileBytes = attachmentLimits?.max_file_bytes ?? 0;
+  const maxTotalBytes = attachmentLimits?.max_total_bytes ?? 0;
+  const maxVideoCount = attachmentLimits?.max_video_count ?? 0;
+  const maxVideoBytes = attachmentLimits?.max_video_bytes ?? 0;
   const maxTextBytes = ingressLimits?.message.max_text_bytes ?? 64 * 1024;
 
   const formatRejection = useCallback(
     (reason: Exclude<AttachmentError, "too_large">): string => {
       const key = `thread.composer.imageRejected.${reason}`;
+      const maximum = reason === "total_too_large"
+        ? formatBytes(maxTotalBytes)
+        : reason === "too_many_videos"
+          ? maxVideoCount
+          : maxAttachments;
       const fallback = reason === "too_many_videos"
-        ? "Max 1 video per message"
+        ? `Max ${maxVideoCount} videos per message`
         : reason === "too_many_attachments"
         ? `Max ${maxAttachments} attachments per message`
         : reason === "empty_file"
           ? "Empty files cannot be attached"
           : reason === "total_too_large"
-            ? "Attachments are too large together — remove some or use smaller files"
+            ? `Attachments are too large together (max ${formatBytes(maxTotalBytes)}) — remove some or use smaller files`
             : "Unsupported file type";
-      return t(key, { max: maxAttachments, defaultValue: fallback });
+      return t(key, { max: maximum, defaultValue: fallback });
     },
-    [maxAttachments, t],
+    [maxAttachments, maxTotalBytes, maxVideoCount, t],
   );
 
   const formatUploadTooLarge = useCallback(
@@ -581,22 +578,25 @@ export function ThreadComposer({
       return textTooLargeMessage();
     }
     const attachments = prompt.images ?? [];
+    if (attachments.length > 0 && !attachmentLimits) {
+      return "Attachment limits are not available yet";
+    }
     const videos = attachments.filter((item) => item.kind === "video").length;
-    if (videos > MAX_VIDEOS_PER_MESSAGE) return formatRejection("too_many_videos");
+    if (videos > maxVideoCount) return formatRejection("too_many_videos");
     if (attachments.length - videos > maxAttachments) return formatRejection("too_many_attachments");
-    const oversized = attachments.find((item) => queuedUploadBytes(item) > (item.kind === "video" ? MAX_VIDEO_BYTES : maxFileBytes));
+    const oversized = attachments.find((item) => queuedUploadBytes(item) > (item.kind === "video" ? maxVideoBytes : maxFileBytes));
     if (oversized) {
-      return formatUploadTooLarge(queuedUploadBytes(oversized), oversized.kind === "video" ? MAX_VIDEO_BYTES : maxFileBytes);
+      return formatUploadTooLarge(queuedUploadBytes(oversized), oversized.kind === "video" ? maxVideoBytes : maxFileBytes);
     }
     const total = attachments.reduce((sum, item) => sum + (item.kind === "video" ? 0 : queuedUploadBytes(item)), 0);
-    if (total > (ingressLimits?.attachments.max_total_bytes ?? MAX_TOTAL_ATTACHMENT_BYTES)) {
+    if (total > maxTotalBytes) {
       return formatRejection("total_too_large");
     }
     if ((prompt.sessionMentions?.length ?? 0) > SESSION_MENTIONS_LIMIT) {
       return t("thread.composer.queued.tooManyMentions", { max: SESSION_MENTIONS_LIMIT });
     }
     return null;
-  }, [formatRejection, formatUploadTooLarge, ingressLimits, maxAttachments, maxFileBytes, maxTextBytes, t, textTooLargeMessage]);
+  }, [attachmentLimits, formatRejection, formatUploadTooLarge, maxAttachments, maxFileBytes, maxTotalBytes, maxTextBytes, maxVideoBytes, maxVideoCount, t, textTooLargeMessage]);
 
   const validatePrompt = useCallback((prompt: QueuedPromptContent): boolean => {
     if (imageInputBlocked && prompt.images?.some(({ kind }) => kind === "image")) {
@@ -731,18 +731,18 @@ export function ThreadComposer({
   const restoredDraftAttachments = useRef(false);
   const [draftAttachmentsReady, setDraftAttachmentsReady] = useState(!initialDraft?.attachments.length);
   useLayoutEffect(() => {
-    if (restoredDraftAttachments.current) return;
+    if (restoredDraftAttachments.current || !attachmentLimits) return;
     restoredDraftAttachments.current = true;
     for (const attachment of initialDraft?.attachments ?? []) {
       if (attachment instanceof File) enqueue([attachment], { restoringDraft: true });
       else addLocal(attachment, { restoringDraft: true });
     }
     setDraftAttachmentsReady(true);
-  }, [enqueue, addLocal, initialDraft]);
+  }, [attachmentLimits, enqueue, addLocal, initialDraft]);
 
   const addFiles = useCallback(
     (files: File[]) => {
-      if (interactionDisabled || files.length === 0) return;
+      if (interactionDisabled || !attachmentLimits || files.length === 0) return;
       const { rejected } = enqueue(files);
       if (rejected.length > 0) {
         const { reason, file } = rejected[0];
@@ -751,13 +751,13 @@ export function ThreadComposer({
           return;
         }
         setInlineError(reason === "too_large"
-          ? formatUploadTooLarge(file.size, acceptedAttachmentKind(file) === "video" ? MAX_VIDEO_BYTES : maxFileBytes)
+          ? formatUploadTooLarge(file.size, acceptedAttachmentKind(file) === "video" ? maxVideoBytes : maxFileBytes)
           : formatRejection(reason));
       } else {
         setInlineError(null);
       }
     },
-    [enqueue, formatRejection, formatUploadTooLarge, interactionDisabled, maxFileBytes, showToast],
+    [attachmentLimits, enqueue, formatRejection, formatUploadTooLarge, interactionDisabled, maxFileBytes, maxVideoBytes, showToast],
   );
 
   const {
@@ -1029,7 +1029,7 @@ export function ThreadComposer({
   }, [interactionDisabled, isUserShell, onAttachmentPaste, onInspectAttachment, rawSelection, replaceMentionInput, scopeIdentity, value]);
 
   useLayoutEffect(() => {
-    if (!pathInspection) return;
+    if (!pathInspection || !attachmentLimits) return;
     if (isUserShell || pathInspection.scope !== scopeIdentity || !pathInspection.range.update(value)) {
       pathCheckGeneration.current += 1;
       setPathInspection(null);
@@ -1043,7 +1043,7 @@ export function ThreadComposer({
       setInlineError(null);
     }
     setPathInspection(null);
-  }, [addLocal, isUserShell, mentionInput.isComposing, pathInspection, rawSelection, replaceMentionInput, scopeIdentity, value]);
+  }, [addLocal, attachmentLimits, isUserShell, mentionInput.isComposing, pathInspection, rawSelection, replaceMentionInput, scopeIdentity, value]);
 
   const draftText = composerMentionText(mentionInput.segments).raw;
   const sessionDragInsertion = sessionDragPreview
@@ -1806,7 +1806,7 @@ export function ThreadComposer({
     [removeChip],
   );
 
-  const attachButtonDisabled = interactionDisabled || full;
+  const attachButtonDisabled = interactionDisabled || !attachmentLimits || full;
   const showVoiceButton = Boolean(onTranscribeAudio) && (
     voiceRecorder.state !== "idle"
     || (!hasComposerContent && images.length === 0 && !isStreaming && !modelNeedsSetup)
@@ -2058,7 +2058,7 @@ export function ThreadComposer({
                   })
                 }
                 formatError={(reason) => reason === "too_large"
-                  ? formatUploadTooLarge(img.file.size, img.kind === "video" ? MAX_VIDEO_BYTES : maxFileBytes)
+                  ? formatUploadTooLarge(img.file.size, img.kind === "video" ? maxVideoBytes : maxFileBytes)
                   : formatRejection(reason)}
                 onRemove={() => removeChip(img.id)}
                 onKeyDown={onChipKey(img.id)}
@@ -2179,6 +2179,7 @@ export function ThreadComposer({
               accept={ACCEPT_ATTR}
               multiple
               hidden
+              disabled={interactionDisabled || !attachmentLimits}
               onChange={onFilePick}
             />
             <Button

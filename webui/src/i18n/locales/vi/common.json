@@ -697,7 +697,7 @@
     "appearance": {
       "background": "Ảnh nền",
       "backgroundChoose": "Chọn ảnh",
-      "backgroundTooLarge": "Ảnh không được lớn hơn 6 MiB.",
+      "backgroundTooLarge": "Ảnh không được lớn hơn {{max}}.",
       "backgroundFade": "Làm nhạt nền",
       "backgroundBlur": "Độ mờ",
       "backgroundReplace": "Đổi ảnh",
@@ -2105,12 +2105,12 @@
         "unsupported_type": "Loại tệp không được hỗ trợ",
         "empty_file": "Không thể đính kèm tệp trống",
         "too_many_attachments": "Tối đa {{max}} tệp đính kèm mỗi tin nhắn",
-        "too_many_videos": "Tối đa 1 video mỗi tin nhắn",
+        "too_many_videos": "Tối đa {{max}} video mỗi tin nhắn",
         "too_many_images": "Tối đa {{max}} ảnh mỗi tin nhắn",
         "magic_mismatch": "Tệp này không phải là một ảnh thực",
         "decode_failed": "Không thể giải mã ảnh này",
         "too_large": "Tệp có dung lượng {{size}}, vượt giới hạn tải lên {{max}}",
-        "total_too_large": "Tổng dung lượng tệp đính kèm quá lớn — hãy xóa bớt hoặc dùng tệp nhỏ hơn",
+        "total_too_large": "Tổng dung lượng tệp đính kèm quá lớn (tối đa {{max}}) — hãy xóa bớt hoặc dùng tệp nhỏ hơn",
         "io": "Không thể đọc tệp này"
       },
       "mentions": {

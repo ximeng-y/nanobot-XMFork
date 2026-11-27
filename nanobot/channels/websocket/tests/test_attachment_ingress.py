@@ -50,6 +50,29 @@ async def event(ws, name):
                 return payload
 
 
+async def start_custom_gateway(tmp_path, config):
+    bus = MessageBus()
+    services = build_gateway_services(
+        config=config, bus=bus, session_manager=SessionManager(tmp_path),
+        static_dist_path=None, workspace_path=tmp_path,
+        default_restrict_to_workspace=True, runtime_model_name=None,
+        runtime_surface="browser", runtime_capabilities_overrides=None,
+        config_path=tmp_path / "config.json",
+    )
+    channel = WebSocketChannel(config, bus, gateway=services)
+    task = asyncio.create_task(channel.start())
+    async with asyncio.timeout(10):
+        while channel._server is None:
+            if task.done():
+                await task
+            await asyncio.sleep(.01)
+    port = channel._server.sockets[0].getsockname()[1]
+    return (
+        channel, bus, f"http://127.0.0.1:{port}",
+        f"ws://127.0.0.1:{port}/ws?token=test-secret", task,
+    )
+
+
 @pytest.mark.parametrize("finish", [True, False], ids=["complete", "disconnect"])
 async def test_streaming_upload_blocks_maintenance_until_written_or_cleaned(gateway, finish):
     channel, bus, http_url, ws_url = gateway
@@ -269,6 +292,94 @@ async def test_http_policy_rejection_does_not_leave_files(gateway, mime, body):
         ) as response:
             assert response.status == 400
         assert not [p for p in channel.gateway.uploads.store.media_dir.rglob("*") if p.is_file()]
+
+
+async def test_real_listener_uses_configured_nonvideo_limits(tmp_path, monkeypatch):
+    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    config = WebSocketConfig(
+        port=0, path="/ws", token="test-secret",
+        uploads={"maxCount": 1, "maxFileBytes": 4, "maxTotalBytes": 6},
+    )
+    channel, bus, http_url, ws_url, task = await start_custom_gateway(tmp_path, config)
+    try:
+        async with connect(ws_url) as ws, aiohttp.ClientSession() as http:
+            capability = (await event(ws, "ready"))["upload"]
+            headers = {
+                "Authorization": f"Bearer {capability['token']}",
+                "Content-Type": "text/plain",
+            }
+            async with http.post(
+                http_url + capability["path"], data=b"12345", headers=headers,
+            ) as response:
+                assert response.status == 400
+
+            references = []
+            for body in (b"1234", b"5678"):
+                async with http.post(
+                    http_url + capability["path"], data=body, headers=headers,
+                ) as response:
+                    assert response.status == 201
+                    references.append((await response.json())["reference"])
+
+            frame = {
+                "type": "message", "chat_id": "configured-limits", "content": "look",
+                "webui": True, "turn_id": "too-many-docs",
+                "media": [{"reference": reference} for reference in references],
+            }
+            await ws.send(json.dumps(frame))
+            error = await event(ws, "error")
+            assert error["detail"] == "attachment_rejected"
+            assert "Too many non-video" in error["reason"]
+
+            frame["turn_id"] = "one-doc"
+            frame["media"] = [{"reference": references[0]}]
+            await ws.send(json.dumps(frame))
+            assert (await event(ws, "message_accepted"))["turn_id"] == "one-doc"
+            assert (await bus.consume_inbound()).media
+    finally:
+        await channel.stop()
+        await task
+
+
+async def test_real_listener_allows_configured_multiple_videos(tmp_path, monkeypatch):
+    monkeypatch.setattr("nanobot.config.paths.get_data_dir", lambda: tmp_path)
+    config = WebSocketConfig(
+        port=0, path="/ws", token="test-secret",
+        uploads={"maxVideoCount": 2, "maxVideoBytes": 4},
+    )
+    channel, bus, http_url, ws_url, task = await start_custom_gateway(tmp_path, config)
+    try:
+        async with connect(ws_url) as ws, aiohttp.ClientSession() as http:
+            capability = (await event(ws, "ready"))["upload"]
+            headers = {
+                "Authorization": f"Bearer {capability['token']}",
+                "Content-Type": "video/mp4",
+            }
+            async with http.post(
+                http_url + capability["path"], data=b"12345", headers=headers,
+            ) as response:
+                assert response.status == 400
+
+            references = []
+            for body in (b"123", b"456"):
+                async with http.post(
+                    http_url + capability["path"], data=body, headers=headers,
+                ) as response:
+                    assert response.status == 201
+                    references.append((await response.json())["reference"])
+
+            frame = {
+                "type": "message", "chat_id": "configured-videos", "content": "look",
+                "webui": True, "turn_id": "two-videos",
+                "media": [{"reference": reference} for reference in references],
+            }
+            await ws.send(json.dumps(frame))
+            assert (await event(ws, "message_accepted"))["turn_id"] == "two-videos"
+            inbound = await bus.consume_inbound()
+            assert len(inbound.media) == 2
+    finally:
+        await channel.stop()
+        await task
 
 
 async def test_one_shot_handshake_token_is_not_an_upload_credential(gateway):

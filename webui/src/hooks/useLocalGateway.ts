@@ -87,7 +87,7 @@ export function useLocalGateway(prefetchChat: () => void) {
       ...current,
       ...credentials,
       modelName: boot.model_name ?? current.modelName,
-      ingressLimits: boot.limits ?? current.ingressLimits,
+      ingressLimits: boot.limits ?? null,
     } : current);
     return { token: credentials.token, url };
   }, []);

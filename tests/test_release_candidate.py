@@ -50,7 +50,7 @@ def test_same_source_and_sequence_produce_same_candidate_without_mutating_source
     assert (root / "pyproject.toml").read_bytes() == before
     assert git(root, "status", "--porcelain") == ""
     assert git(tmp_path / "candidate-one", "rev-parse", "HEAD^") == source_commit
-    assert tomllib.loads((tmp_path / "candidate-one/pyproject.toml").read_text())["project"]["version"] == "0.3.6.dev42"
+    assert tomllib.loads((tmp_path / "candidate-one/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"] == "0.3.6.dev42"
     assert _candidate_identity(tmp_path / "candidate-one", source_commit) == (
         "0.3.6.dev42", ">=3.11", first["candidate_commit"],
     )

@@ -24,5 +24,7 @@ def test_bootstrap_keeps_transport_and_business_limits_separate() -> None:
         "max_count": 4,
         "max_file_bytes": 6_291_456,
         "max_total_bytes": 25_165_824,
+        "max_video_count": 1,
+        "max_video_bytes": 20_971_520,
     }
     assert policy.minimum_full_policy_frame_bytes() < 36 * 1024 * 1024

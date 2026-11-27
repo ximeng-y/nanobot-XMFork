@@ -697,7 +697,7 @@
     "appearance": {
       "background": "배경 이미지",
       "backgroundChoose": "이미지 선택",
-      "backgroundTooLarge": "이미지는 6 MiB 이하여야 합니다",
+      "backgroundTooLarge": "이미지는 {{max}} 이하여야 합니다",
       "backgroundFade": "배경 흐리기",
       "backgroundBlur": "흐림 정도",
       "backgroundReplace": "이미지 변경",
@@ -2105,12 +2105,12 @@
         "unsupported_type": "지원하지 않는 파일 형식입니다",
         "empty_file": "빈 파일은 첨부할 수 없습니다",
         "too_many_attachments": "메시지당 최대 {{max}}개까지 가능합니다",
-        "too_many_videos": "메시지당 동영상은 최대 1개까지 가능합니다",
+        "too_many_videos": "메시지당 동영상은 최대 {{max}}개까지 가능합니다",
         "too_many_images": "메시지당 최대 {{max}}장까지 가능합니다",
         "magic_mismatch": "이미지 파일이 아닌 것 같습니다",
         "decode_failed": "이 이미지를 디코딩할 수 없습니다",
         "too_large": "파일 크기 {{size}}가 업로드 한도 {{max}}를 초과합니다",
-        "total_too_large": "첨부 파일의 전체 크기가 너무 큽니다. 일부를 제거하거나 더 작은 파일을 사용해 주세요",
+        "total_too_large": "첨부 파일의 전체 크기가 너무 큽니다(최대 {{max}}). 일부를 제거하거나 더 작은 파일을 사용해 주세요",
         "io": "이 파일을 읽을 수 없습니다"
       },
       "mentions": {

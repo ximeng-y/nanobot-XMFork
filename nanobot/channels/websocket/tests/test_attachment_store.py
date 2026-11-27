@@ -64,6 +64,45 @@ async def test_ownership_invalid_and_duplicate_refs_are_atomic(tmp_path):
     assert len(store.resolve([ref], owner="owner")) == 1
 
 
+@pytest.mark.parametrize("entrypoint", ["commit", "commit_single"])
+async def test_commit_marker_failure_keeps_reference_and_capacity(
+    tmp_path, monkeypatch, entrypoint,
+):
+    store = AttachmentStore(tmp_path, max_pending=1, max_pending_bytes=6)
+    ref = await upload(store, b"123456")
+    path = Path(store.resolve([ref], owner="owner")[0])
+    marker = tmp_path / ".pending-attachments" / path.name
+    original_unlink = Path.unlink
+    failed = False
+
+    def fail_marker_once(target, *args, **kwargs):
+        nonlocal failed
+        if target == marker and not failed:
+            failed = True
+            raise PermissionError("marker is busy")
+        return original_unlink(target, *args, **kwargs)
+
+    def commit_reference():
+        if entrypoint == "commit":
+            return store.commit([ref], owner="owner")
+        return store.commit_single(ref, owner="owner")
+
+    monkeypatch.setattr(Path, "unlink", fail_marker_once)
+    with pytest.raises(PermissionError, match="marker is busy"):
+        commit_reference()
+
+    assert failed
+    assert path.exists()
+    assert marker.exists()
+    assert store.resolve([ref], owner="owner") == [str(path)]
+
+    commit_reference()
+    assert not marker.exists()
+    with pytest.raises(AttachmentUploadError):
+        store.resolve([ref], owner="owner")
+    assert await upload(store, b"123456")
+
+
 @pytest.mark.parametrize("size,raw", [(4, b"12345"), (6, b"12345")])
 async def test_body_length_failure_cleans_file_and_capacity(tmp_path, size, raw):
     store = AttachmentStore(tmp_path, max_pending=1, max_pending_bytes=6)
@@ -106,6 +145,14 @@ async def test_inflight_capacity_and_cancellation(tmp_path):
         await task
     assert not [path for path in tmp_path.rglob("*") if path.is_file()]
     assert await upload(store, b"1234567890")
+
+
+async def test_pending_count_error_reports_configured_limit(tmp_path):
+    store = AttachmentStore(tmp_path, max_pending=1)
+    await upload(store)
+
+    with pytest.raises(AttachmentUploadError, match="maximum 1"):
+        await upload(store)
 
 
 async def test_timeout_cleans_partial_upload(tmp_path):
@@ -253,17 +300,17 @@ async def test_filename_collision_preserves_another_uploads_crash_marker(tmp_pat
     store.clear()
 
 
-async def test_video_upload_limit_explains_size_before_reading_body(tmp_path):
-    from nanobot.channels.websocket.attachment_policy import MAX_VIDEO_BYTES
-
+async def test_video_upload_limit_explains_configured_size_before_reading_body(tmp_path):
     async def unread():
         pytest.fail("oversized upload body must not be consumed")
         yield b""
 
     with pytest.raises(AttachmentUploadError) as error:
-        await AttachmentStore(tmp_path).upload(
-            unread(), owner="owner", mime="video/mp4", size=MAX_VIDEO_BYTES + 1,
+        await AttachmentStore(
+            tmp_path, limits=AttachmentIngressLimits(max_video_bytes=5),
+        ).upload(
+            unread(), owner="owner", mime="video/mp4", size=6,
         )
-    assert "20 MiB" in str(error.value)
-    assert "20,971,521" in str(error.value)
+    assert "5 bytes" in str(error.value)
+    assert "6" in str(error.value)
     assert not list(tmp_path.iterdir())

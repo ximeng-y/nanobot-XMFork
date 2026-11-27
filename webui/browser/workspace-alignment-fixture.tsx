@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ThreadComposer } from "@/components/thread/ThreadComposer";
 import { ComposerUsagePopover } from "@/components/thread/ComposerUsagePopover";
 import type { WorkspaceScopePayload, WorkspacesPayload } from "@/lib/types";
+import { ingressLimitsFixture } from "./ingress-limits-fixture";
 
 const initialScope: WorkspaceScopePayload = { project_path: "/workspace", access_mode: "full" };
 const catalog: WorkspacesPayload = {
@@ -16,6 +17,7 @@ export function WorkspaceAlignmentFixture({ parameters }: { parameters: URLSearc
       {(renderContextUsage) => <ThreadComposer variant={parameters.get("composerVariant") === "thread" ? "thread" : "hero"}
         onSend={() => {}} workspaceScope={scope} workspaceDefaultScope={initialScope}
         renderContextUsage={renderContextUsage}
+        ingressLimits={ingressLimitsFixture}
         workspaceControls={catalog.controls} onWorkspaceScopeChange={setScope}
         onLoadWorkspaceProjects={async () => catalog}
         onResolveWorkspaceProject={async path => ({ path, name: "workspace" })}

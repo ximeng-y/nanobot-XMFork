@@ -52,11 +52,6 @@ export type AttachmentError =
 
 type AttachmentCountError = Extract<AttachmentError, "too_many_attachments" | "too_many_videos">;
 
-export const MAX_ATTACHMENTS_PER_MESSAGE = 4;
-export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
-export const MAX_TOTAL_ATTACHMENT_BYTES = 24 * 1024 * 1024;
-export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
-export const MAX_VIDEOS_PER_MESSAGE = 1;
 const VIDEO_MIME_BY_EXTENSION = new Map([
   [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"],
 ]);
@@ -112,12 +107,6 @@ function mimeForFile(file: File): string {
     return "application/octet-stream";
   }
   return file.type;
-}
-
-function positiveLimit(value: number | null | undefined, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : fallback;
 }
 
 export function acceptedAttachmentKind(file: File): AttachmentKind | null {
@@ -244,18 +233,12 @@ export function useAttachedImages({
   ingressLimits = null,
 }: UseAttachedImagesOptions = {}): UseAttachedImagesApi {
   const [images, setImages] = useState<AttachedAttachment[]>([]);
-  const maxAttachments = positiveLimit(
-    ingressLimits?.attachments.max_count,
-    MAX_ATTACHMENTS_PER_MESSAGE,
-  );
-  const maxFileBytes = positiveLimit(
-    ingressLimits?.attachments.max_file_bytes,
-    MAX_ATTACHMENT_BYTES,
-  );
-  const maxTotalBytes = positiveLimit(
-    ingressLimits?.attachments.max_total_bytes,
-    MAX_TOTAL_ATTACHMENT_BYTES,
-  );
+  const attachmentLimits = ingressLimits?.attachments ?? null;
+  const maxAttachments = attachmentLimits?.max_count ?? 0;
+  const maxFileBytes = attachmentLimits?.max_file_bytes ?? 0;
+  const maxTotalBytes = attachmentLimits?.max_total_bytes ?? 0;
+  const maxVideoCount = attachmentLimits?.max_video_count ?? 0;
+  const maxVideoBytes = attachmentLimits?.max_video_bytes ?? 0;
   // Ref mirror so ``enqueue`` can see the authoritative length when invoked
   // multiple times in a single tick (rapid file selection, drag of many
   // files, paste storms). ``state`` is stale for that second + call.
@@ -275,7 +258,7 @@ export function useAttachedImages({
       const rejected: Array<{ file: File; reason: AttachmentError }> = [];
       const toAdd: Array<AttachedAttachment & { file: File }> = [];
       let slot = maxAttachments - imagesRef.current.filter((item) => item.kind !== "video").length;
-      let videoSlot = MAX_VIDEOS_PER_MESSAGE - imagesRef.current.filter((item) => item.kind === "video").length;
+      let videoSlot = maxVideoCount - imagesRef.current.filter((item) => item.kind === "video").length;
       let projectedDecodedBytes = imagesRef.current.reduce(
         (total, image) => total + (image.local || image.kind === "video" ? 0 : (
           image.encodedBytes
@@ -294,7 +277,7 @@ export function useAttachedImages({
           rejected.push({ file, reason: "empty_file" });
           continue;
         }
-        if (!restoringDraft && kind !== "image" && file.size > (kind === "video" ? MAX_VIDEO_BYTES : maxFileBytes)) {
+        if (!restoringDraft && kind !== "image" && file.size > (kind === "video" ? maxVideoBytes : maxFileBytes)) {
           rejected.push({ file, reason: "too_large" });
           continue;
         }
@@ -327,8 +310,8 @@ export function useAttachedImages({
         for (const entry of toAdd) {
           queueMicrotask(() => {
             const work = entry.kind === "image"
-              ? encodeImage(entry.file)
-              : encodeFile(entry.file, entry.kind === "video" ? MAX_VIDEO_BYTES : maxFileBytes);
+              ? encodeImage(entry.file, maxFileBytes)
+              : encodeFile(entry.file, entry.kind === "video" ? maxVideoBytes : maxFileBytes);
             work.then(
               (result) => {
                 if (result.ok) {
@@ -359,13 +342,13 @@ export function useAttachedImages({
       }
       return { rejected };
     },
-    [maxAttachments, maxFileBytes, maxTotalBytes, setEntry],
+    [maxAttachments, maxFileBytes, maxTotalBytes, maxVideoBytes, maxVideoCount, setEntry],
   );
 
   const addLocal = useCallback((local: LocalAttachment, { restoringDraft = false } = {}): AttachmentCountError | null => {
     const current = imagesRef.current;
     const videos = current.filter((item) => item.kind === "video").length;
-    if (!restoringDraft && (local.kind === "video" ? videos >= MAX_VIDEOS_PER_MESSAGE : current.length - videos >= maxAttachments)) {
+    if (!restoringDraft && (local.kind === "video" ? videos >= maxVideoCount : current.length - videos >= maxAttachments)) {
       return local.kind === "video" ? "too_many_videos" : "too_many_attachments";
     }
     const next: AttachedAttachment[] = [...current, {
@@ -376,7 +359,7 @@ export function useAttachedImages({
     imagesRef.current = next;
     setImages(next);
     return null;
-  }, [maxAttachments]);
+  }, [maxAttachments, maxVideoCount]);
 
   const remove = useCallback((id: string) => {
     let nextFocusId: string | null = null;
@@ -469,7 +452,7 @@ export function useAttachedImages({
 
   const encoding = images.some((img) => img.status === "encoding");
   const videos = images.filter((image) => image.kind === "video").length;
-  const full = images.length - videos >= maxAttachments && videos >= MAX_VIDEOS_PER_MESSAGE;
+  const full = images.length - videos >= maxAttachments && videos >= maxVideoCount;
 
   return { images, enqueue, addLocal, remove, clear, restoreReadyImages, encoding, full };
 }

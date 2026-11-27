@@ -697,7 +697,7 @@
     "appearance": {
       "background": "Gambar latar",
       "backgroundChoose": "Pilih gambar",
-      "backgroundTooLarge": "Ukuran gambar maksimal 6 MiB.",
+      "backgroundTooLarge": "Ukuran gambar maksimal {{max}}.",
       "backgroundFade": "Pudarkan latar",
       "backgroundBlur": "Keburaman",
       "backgroundReplace": "Ganti gambar",
@@ -2105,12 +2105,12 @@
         "unsupported_type": "Tipe file tidak didukung",
         "empty_file": "File kosong tidak dapat dilampirkan",
         "too_many_attachments": "Maksimal {{max}} lampiran per pesan",
-        "too_many_videos": "Maksimal 1 video per pesan",
+        "too_many_videos": "Maksimal {{max}} video per pesan",
         "too_many_images": "Maksimal {{max}} gambar per pesan",
         "magic_mismatch": "File ini tampaknya bukan gambar asli",
         "decode_failed": "Tidak dapat mendekode gambar ini",
         "too_large": "Ukuran file {{size}} melebihi batas unggahan {{max}}",
-        "total_too_large": "Total lampiran terlalu besar — hapus beberapa atau gunakan file yang lebih kecil",
+        "total_too_large": "Total lampiran terlalu besar (maks. {{max}}) — hapus beberapa atau gunakan file yang lebih kecil",
         "io": "Tidak dapat membaca file ini"
       },
       "mentions": {

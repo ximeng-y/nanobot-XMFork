@@ -4,6 +4,10 @@ import { fetchWithTimeout } from "./http";
 const SECRET_STORAGE_KEY = "nanobot-webui.bootstrap-secret";
 const URL_SECRET_PARAM = "bootstrapSecret";
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
 export class BootstrapAuthRequiredError extends Error {
   constructor(message = "bootstrap authentication required") {
     super(message);
@@ -86,6 +90,15 @@ export async function fetchBootstrap(
   const body = (await res.json()) as BootstrapResponse;
   if (!body.ws_path) {
     throw new Error("bootstrap response missing ws_path");
+  }
+  const attachments = body.limits?.attachments;
+  if (!attachments
+    || !isPositiveInteger(attachments.max_count)
+    || !isPositiveInteger(attachments.max_file_bytes)
+    || !isPositiveInteger(attachments.max_total_bytes)
+    || !isPositiveInteger(attachments.max_video_count)
+    || !isPositiveInteger(attachments.max_video_bytes)) {
+    throw new Error("bootstrap response has invalid attachment limits");
   }
   return body;
 }

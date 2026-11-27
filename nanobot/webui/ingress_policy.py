@@ -46,6 +46,8 @@ class WebUIIngressPolicy:
                 "max_count": self.attachments.max_count,
                 "max_file_bytes": self.attachments.max_file_bytes,
                 "max_total_bytes": self.attachments.max_total_bytes,
+                "max_video_count": self.attachments.max_video_count,
+                "max_video_bytes": self.attachments.max_video_bytes,
             },
         }
 

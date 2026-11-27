@@ -15,7 +15,7 @@ from typing import Any, Self, TypeGuard, cast
 from urllib.parse import urlsplit, urlunsplit
 from weakref import WeakSet
 
-from pydantic import Field, PrivateAttr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, StrictInt, field_validator, model_validator
 from websockets.asyncio.server import Server, ServerConnection, serve, unix_serve
 from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request as WsRequest
@@ -25,6 +25,15 @@ from websockets.protocol import CONNECTING
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
+from nanobot.channels.websocket.attachment_policy import (
+    DEFAULT_MAX_COUNT,
+    DEFAULT_MAX_FILE_BYTES,
+    DEFAULT_MAX_PENDING,
+    DEFAULT_MAX_PENDING_BYTES,
+    DEFAULT_MAX_TOTAL_BYTES,
+    DEFAULT_MAX_VIDEO_BYTES,
+    DEFAULT_MAX_VIDEO_COUNT,
+)
 from nanobot.channels.websocket.binary_http import BinaryHTTPBridge
 from nanobot.config_base import Base
 from nanobot.runtime_admission import RuntimeMaintenanceError
@@ -153,6 +162,18 @@ class TrustedProxyAuthConfig(Base):
         return self
 
 
+class UploadConfig(Base):
+    """WebUI 上传配额；所有字段都是严格正整数。"""
+
+    max_count: StrictInt = Field(default=DEFAULT_MAX_COUNT, gt=0)
+    max_file_bytes: StrictInt = Field(default=DEFAULT_MAX_FILE_BYTES, gt=0)
+    max_total_bytes: StrictInt = Field(default=DEFAULT_MAX_TOTAL_BYTES, gt=0)
+    max_video_count: StrictInt = Field(default=DEFAULT_MAX_VIDEO_COUNT, gt=0)
+    max_video_bytes: StrictInt = Field(default=DEFAULT_MAX_VIDEO_BYTES, gt=0)
+    max_pending: StrictInt = Field(default=DEFAULT_MAX_PENDING, gt=0)
+    max_pending_bytes: StrictInt = Field(default=DEFAULT_MAX_PENDING_BYTES, gt=0)
+
+
 class WebSocketConfig(Base):
     """WebSocket server channel configuration.
 
@@ -192,6 +213,7 @@ class WebSocketConfig(Base):
     # Keep the existing configurable guard (also used for non-attachment
     # frames and older clients). HTTP attachments are outside this limit.
     max_message_bytes: int = Field(default=37_748_736, ge=1024, le=41_943_040)
+    uploads: UploadConfig = Field(default_factory=UploadConfig)
     ping_interval_s: float = Field(default=20.0, ge=5.0, le=300.0)
     ping_timeout_s: float = Field(default=20.0, ge=5.0, le=300.0)
     ssl_certfile: str = ""

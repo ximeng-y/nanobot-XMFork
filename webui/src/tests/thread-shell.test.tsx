@@ -23,10 +23,23 @@ import type {
   SubagentTaskSnapshot,
   ThreadProjectionEvent,
   UIMessage,
+  WebUIIngressLimits,
   WebuiThreadPersistedPayload,
 } from "@/lib/types";
 import { canonicalThreadPayload } from "./thread-test-payload";
 import { createStreamClient } from "./stream-client";
+
+const INGRESS_LIMITS: WebUIIngressLimits = {
+  transport: { max_frame_bytes: 36 * 1024 * 1024, envelope_reserve_bytes: 64 * 1024 },
+  message: { max_text_bytes: 64 * 1024 },
+  attachments: {
+    max_count: 4,
+    max_file_bytes: 6 * 1024 * 1024,
+    max_total_bytes: 24 * 1024 * 1024,
+    max_video_count: 1,
+    max_video_bytes: 20 * 1024 * 1024,
+  },
+};
 
 async function openMessageActions(text: string): Promise<HTMLElement> {
   const message = await screen.findByText(text);
@@ -151,6 +164,7 @@ function wrap(
       client={client as unknown as import("@/lib/nanobot-client").NanobotClient}
       token={token}
       modelName={modelName ?? null}
+      ingressLimits={INGRESS_LIMITS}
       webuiCapabilities={webuiCapabilities}
     >
       {children}

@@ -566,8 +566,11 @@ class WebUICommandRouter:
         if not isinstance(raw_media, list):
             raise AttachmentUploadError("malformed")
         attachments = cast(list[Any], raw_media)
-        if len(attachments) > self._uploads.store.limits.max_count + 1:
-            raise AttachmentUploadError("Too many attachments")
+        limits = self._uploads.store.limits
+        if len(attachments) > limits.max_attachments:
+            raise AttachmentUploadError(
+                f"Too many attachments (maximum {limits.max_attachments})"
+            )
         references: list[str] = []
         local_paths: list[str] = []
         media_names: list[str | None] = []
@@ -1249,9 +1252,9 @@ class WebUICommandRouter:
                                         return WebUIRequestResult(status=400, message="Invalid attachment reference")
                                     owner = self._uploads.owner(connection)
                                     try:
-                                        entry = self._uploads.store.inspect([reference], owner=owner)[0]
+                                        entry = self._uploads.store.inspect_single(reference, owner=owner)
                                         # Claim before yielding so disconnect cleanup cannot unlink the worker's source.
-                                        self._uploads.store.commit([reference], owner=owner)
+                                        self._uploads.store.commit_single(reference, owner=owner)
 
                                         def persist_staged_background() -> None:
                                             try:

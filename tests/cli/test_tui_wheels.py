@@ -27,7 +27,7 @@ from scripts.release_candidate import (
 
 @pytest.fixture
 def candidate(tmp_path):
-    version = tomllib.loads((packager.ROOT / "pyproject.toml").read_text())["project"]["version"]
+    version = tomllib.loads((packager.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     info = f"nanobot_ai-{version}.dist-info"
     files = {
         "nanobot/__init__.py": f"__version__ = '{version}'\n".encode(),
@@ -203,7 +203,7 @@ def complete_candidate(tmp_path, candidate):
     subprocess.run(["git", "clone", "--shared", str(packager.ROOT), str(root)],
                    check=True, capture_output=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    metadata = tomllib.loads((root / "pyproject.toml").read_text())["project"]
+    metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     wheel, info = candidate
     with zipfile.ZipFile(wheel) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}

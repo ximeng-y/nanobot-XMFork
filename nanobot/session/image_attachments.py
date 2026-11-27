@@ -59,7 +59,7 @@ def persist_user_image_blocks(
             stored.append(cast(object, value))
             continue
         image_id = sha256(url.encode("ascii")).hexdigest()
-        ref: ManagedImageAttachment = {"type": IMAGE_ATTACHMENT_TYPE, "id": image_id}
+        ref = {"type": IMAGE_ATTACHMENT_TYPE, "id": image_id}
         if attachment_service is not None and session_key:
             snapshot = attachment_service.ensure_image_snapshot(
                 None, url, session_key=session_key,

@@ -218,6 +218,7 @@ if TYPE_CHECKING:
     from nanobot.bus.queue import MessageBus
     from nanobot.channels.websocket.attachment_http import AttachmentHTTP
     from nanobot.channels.websocket.runtime import WebSocketConfig
+    from nanobot.config.schema import Config
     from nanobot.webui.settings_services import WebUISettingsServices
 
 _API_KEY_RE = re.compile(r"^[A-Za-z0-9_:.-]{1,128}$")
@@ -244,10 +245,13 @@ def _decode_api_key(raw_key: str) -> str | None:
 
 def _attachment_ids(payload: Mapping[str, Any]) -> list[str] | None:
     raw = payload.get("ids")
-    if not isinstance(raw, list) or len(raw) > 1000:
+    if not isinstance(raw, list):
         return None
-    ids = [item for item in cast(list[object], raw) if isinstance(item, str) and item]
-    if len(ids) != len(raw):
+    raw_ids = cast(list[object], raw)
+    if len(raw_ids) > 1000:
+        return None
+    ids = [item for item in raw_ids if isinstance(item, str) and item]
+    if len(ids) != len(raw_ids):
         return None
     return list(dict.fromkeys(ids))
 
@@ -497,7 +501,7 @@ class GatewayHTTPHandler:
                     except ValueError as exc:
                         return MutationResult.failure(400, str(exc))
 
-                    def save(config):
+                    def save(config: Config) -> AttachmentStorageConfig:
                         config.attachments = updated
                         return updated
 

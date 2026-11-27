@@ -584,7 +584,7 @@ class AttachmentService:
         websocket = self.data_dir / "media" / "websocket"
         if websocket.is_dir() and not websocket.is_symlink():
             journal = websocket / ".pending-attachments"
-            pending_names = {
+            pending_names: set[str] = {
                 marker.name
                 for marker in journal.iterdir()
                 if marker.is_file()
@@ -622,7 +622,7 @@ class AttachmentService:
             references: set[AttachmentReference] = set()
             source_path = record.metadata.get("source_path")
             source_canonical = (
-                _canonical_path(cast(str, source_path))
+                _canonical_path(source_path)
                 if isinstance(source_path, str)
                 else None
             )
@@ -648,7 +648,7 @@ class AttachmentService:
             if record.source != "generated" or not isinstance(source_paths, list):
                 continue
             session_refs = mapping.get(record.id, set())
-            for raw in source_paths:
+            for raw in cast(list[object], source_paths):
                 if not isinstance(raw, str):
                     continue
                 source = self.store.attachment_for_path(Path(raw))

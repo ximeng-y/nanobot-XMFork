@@ -31,7 +31,7 @@ def legacy(workspace: Path, key: str = "websocket:old", *, content: str = "hello
 
 
 def test_migration_must_be_removed_at_declared_sunset():
-    version = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text())["project"]["version"]
+    version = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     assert SUNSET_VERSION == "0.5.0"
     assert Version(Version(version).base_version) < Version(SUNSET_VERSION), (
         "Remove jsonl_migration, its initialization hook, and migration-only tests before 0.5.0"

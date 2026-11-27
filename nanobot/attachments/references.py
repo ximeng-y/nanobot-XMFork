@@ -195,7 +195,7 @@ def _walk_value(
         data = cast(dict[object, object], value)
         local_media = data.get("local_media_paths")
         if isinstance(local_media, list):
-            for item in local_media:
+            for item in cast(list[object], local_media):
                 if not isinstance(item, str) or not item:
                     continue
                 resolved = _resolve_path(item, workspace=workspace, unresolved=unresolved)
@@ -204,7 +204,7 @@ def _walk_value(
         for key in ("media", "media_paths"):
             item = data.get(key)
             if isinstance(item, list):
-                for path in item:
+                for path in cast(list[object], item):
                     if not isinstance(path, str) or not path:
                         continue
                     resolved = _resolve_path(path, workspace=workspace, unresolved=unresolved)
@@ -220,14 +220,14 @@ def _walk_value(
                 paths.add(str(_snapshot_path(image_id, data_dir)))
         if data.get("type") == "image_url":
             image = data.get("image_url")
-            url = image.get("url") if isinstance(image, dict) else None
+            url = cast(dict[object, object], image).get("url") if isinstance(image, dict) else None
             if isinstance(url, str) and url.startswith("data:image/"):
                 paths.add(str(_snapshot_path(
                     sha256(url.encode("ascii")).hexdigest(), data_dir,
                 )))
         artifacts = data.get("artifacts")
         if isinstance(artifacts, list):
-            for artifact in artifacts:
+            for artifact in cast(list[object], artifacts):
                 if not isinstance(artifact, dict):
                     continue
                 artifact_data = cast(dict[object, object], artifact)
@@ -256,7 +256,7 @@ def _walk_value(
                 parsed = _json_value(item) if item.lstrip().startswith("{") else None
                 if isinstance(parsed, dict):
                     _walk_value(
-                        parsed,
+                        cast(dict[object, object], parsed),
                         paths=paths,
                         managed_ids=managed_ids,
                         borrowed=borrowed,
@@ -266,7 +266,7 @@ def _walk_value(
                     )
             elif isinstance(item, (dict, list)):
                 _walk_value(
-                    item,
+                    cast(dict[object, object] | list[object], item),
                     paths=paths,
                     managed_ids=managed_ids,
                     borrowed=borrowed,
@@ -282,7 +282,7 @@ def _walk_value(
                 continue
             if isinstance(item, (dict, list)):
                 _walk_value(
-                    item,
+                    cast(dict[object, object] | list[object], item),
                     paths=paths,
                     managed_ids=managed_ids,
                     borrowed=borrowed,
@@ -291,7 +291,7 @@ def _walk_value(
                     unresolved=unresolved,
                 )
     elif isinstance(value, list):
-        for item in value:
+        for item in cast(list[object], value):
             _walk_value(
                 item,
                 paths=paths,
@@ -387,4 +387,4 @@ def _json_value(value: object) -> object:
 
 def _json_object(value: object) -> dict[str, object]:
     parsed = _json_value(value)
-    return parsed if isinstance(parsed, dict) else {}
+    return cast(dict[str, object], parsed) if isinstance(parsed, dict) else {}

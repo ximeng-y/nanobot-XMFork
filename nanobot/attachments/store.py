@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Literal, cast
 
 AttachmentSource = Literal["upload", "image_snapshot", "generated", "outbound_copy"]
 AttachmentKind = Literal["image", "video", "file"]
@@ -308,8 +308,7 @@ class AttachmentStore:
                         (attachment_id, reference.key, reference.title),
                     )
                 if reservation is not None:
-                    self._reservations.pop(reservation.token, None)
-                    reservation._released = True
+                    reservation.release()
                 connection.commit()
             except BaseException:
                 connection.rollback()
@@ -428,8 +427,7 @@ class AttachmentStore:
                     (attachment_id, file.relative_path),
                 )
                 if reservation is not None:
-                    self._reservations.pop(reservation.token, None)
-                    reservation._released = True
+                    reservation.release()
                 connection.commit()
             except BaseException:
                 connection.rollback()
@@ -716,7 +714,7 @@ class AttachmentStore:
 
                 failed: dict[str, str] = {}
                 freed = 0
-                for relative_path, files in file_records.items():
+                for relative_path, _files in file_records.items():
                     other_links = connection.execute(
                         """SELECT DISTINCT l.attachment_id
                            FROM attachment_file_links l
@@ -758,7 +756,7 @@ class AttachmentStore:
                             (record.id,),
                         )
                         removed.append(record.id)
-                for attachment_id, reason in failed.items():
+                for attachment_id, _reason in failed.items():
                     if attachment_id not in removed:
                         connection.execute(
                             "UPDATE managed_attachments SET status=? WHERE id=?",
@@ -1027,7 +1025,7 @@ class AttachmentStore:
 
     def _protected_bytes(self, registered: set[str]) -> int:
         total = 0
-        pending_names = {
+        pending_names: set[str] = {
             marker.name
             for marker in (self.data_dir / "media" / "websocket" / ".pending-attachments").glob("*")
             if marker.is_file()
@@ -1062,7 +1060,7 @@ class AttachmentStore:
             f"SELECT * FROM managed_attachments WHERE id IN ({_placeholders(ids)})",
             ids,
         ).fetchall()
-        records = []
+        records: list[AttachmentRecord] = []
         for row in rows:
             record = self._record_from_row(connection, row)
             records.append(record)
@@ -1211,7 +1209,7 @@ class AttachmentStore:
             if record.id in selected
             for reference in record.references
         )
-        items = tuple(
+        items: tuple[dict[str, object], ...] = tuple(
             {
                 "id": record.id,
                 "name": record.name,
@@ -1239,10 +1237,10 @@ def _encode_json(value: Mapping[str, object]) -> str:
 
 def _decode_json(value: str) -> dict[str, object]:
     try:
-        parsed = json.loads(value)
+        parsed: object = json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return {}
-    return parsed if isinstance(parsed, dict) else {}
+    return cast(dict[str, object], parsed) if isinstance(parsed, dict) else {}
 
 
 def _placeholders(values: Iterable[object]) -> str:

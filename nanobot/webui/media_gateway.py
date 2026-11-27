@@ -136,7 +136,7 @@ class WebUIMediaGateway:
                     "deleted": True,
                     "url": "",
                 }
-            if signed:
+            if signed and managed is not None:
                 projected = self._sign_managed_record(managed)
                 return (
                     str(projected["url"])

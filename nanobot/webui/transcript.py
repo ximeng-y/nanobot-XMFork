@@ -936,25 +936,6 @@ def _normalize_tool_events(events: Any) -> list[dict[str, Any]]:
     return normalized
 
 
-def _media_from_signed_urls(value: Any) -> list[dict[str, Any]]:
-    media: list[dict[str, Any]] = []
-    urls = cast(list[Any], value) if isinstance(value, list) else []
-    for m in urls:
-        if isinstance(m, dict):
-            media_item = cast(dict[str, Any], m)
-            if not media_item.get("url"):
-                continue
-            name = str(media_item.get("name") or "")
-            media.append(
-                {
-                    "kind": _media_kind_from_name(name),
-                    "url": str(media_item["url"]),
-                    "name": name,
-                },
-            )
-    return media
-
-
 def has_pending_tool_calls(
     lines: list[dict[str, Any]],
     *,

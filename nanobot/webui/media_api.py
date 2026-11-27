@@ -173,7 +173,7 @@ def sign_or_stage_media_path(
             return {"url": signed, "name": path.name}
     staged_tmp: Path | None = None
     reservation = None
-    created = False
+    created_path: Path | None = None
     try:
         resolved = path.resolve(strict=True)
         if not resolved.is_file():
@@ -217,7 +217,7 @@ def sign_or_stage_media_path(
             staged_tmp = target_dir / f".{source_digest}-{uuid.uuid4().hex}.tmp"
             shutil.copyfile(resolved, staged_tmp)
             staged_tmp.replace(staged)
-            created = True
+            created_path = staged
         if temporary_namespace is not None:
             if register_temporary_copy is None or not register_temporary_copy(staged):
                 staged.unlink(missing_ok=True)
@@ -233,9 +233,9 @@ def sign_or_stage_media_path(
     except (OSError, ValueError) as exc:
         if reservation is not None:
             reservation.release()
-        if created:
+        if created_path is not None:
             with suppress(OSError):
-                staged.unlink(missing_ok=True)
+                created_path.unlink(missing_ok=True)
         if logger is not None:
             logger.warning("failed to stage outbound media {}: {}", path, exc)
         return None

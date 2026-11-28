@@ -55,6 +55,7 @@ For shorter, outcome-focused walkthroughs, browse the [task guide index](./guide
 |---|---|
 | Commands and flags | [CLI Reference](./cli-reference.md) |
 | Update nanobot or recover a failed update | [Updating nanobot](./updating.md) |
+| Update this Fork from source or Docker Compose | [Updating nanobot-XMFork](./fork-updating.md) |
 | In-chat slash commands | [In-Chat Commands](./chat-commands.md) |
 | Plain-language overview of how nanobot works | [Concepts](./concepts.md) |
 | Provider and model matching | [Providers and Models](./providers.md) |

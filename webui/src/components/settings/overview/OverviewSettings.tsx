@@ -133,7 +133,8 @@ export function OverviewSettings({
 export function AboutSettings({ settings, onRequestUpdate: requestUpdate }: { settings: SettingsPayload; onRequestUpdate?: () => void }) {
   const hostPicker = useContext(HostNavigationContext);
   const flow = useUpdateFlow();
-  const onRequestUpdate = requestUpdate ?? flow.open;
+  // Fork tag results do not enter the signed ReleaseFeed; only a saved job can reopen the flow.
+  const onRequestUpdate = flow.pending ? requestUpdate ?? flow.open : undefined;
   const currentVersion = settings.version?.current;
   const currentCommit = settings.version?.commit;
   const environment = settings.environment;

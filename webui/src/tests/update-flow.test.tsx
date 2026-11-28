@@ -56,16 +56,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); });
 
 describe("Real update consent and recovery", () => {
-  it("opens the original confirmation from an automatically checked About update without consenting to installation", async () => {
+  it("keeps a Fork tag update out of the signed review flow", async () => {
     vi.mocked(api.checkVersion).mockResolvedValue({ installation_method: "managed",
       updateAvailable: { currentVersion: "0.3.5", latestVersion: "0.3.6" } });
     render(<ClientProvider client={client} token="about-confirmation" webuiCapabilities={["webui.update-flow.v1"]}>
       <AboutSettings settings={settingsPayload()} />
     </ClientProvider>);
-    fireEvent.click(await screen.findByRole("button", { name: /^Update$/ }));
-    expect(await screen.findByRole("button", { name: "Update & restart" })).toBeEnabled();
+    expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
+      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/fork-updating.md");
+    expect(screen.queryByRole("button", { name: /^Update$/ })).toBeNull();
     expect(api.checkVersion).toHaveBeenCalledOnce();
-    expect(api.createUpdateReview).toHaveBeenCalledOnce();
+    expect(api.createUpdateReview).not.toHaveBeenCalled();
     expect(api.prepareUpdate).not.toHaveBeenCalled();
     expect(api.executeUpdate).not.toHaveBeenCalled();
   });

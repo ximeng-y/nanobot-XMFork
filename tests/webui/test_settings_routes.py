@@ -813,13 +813,11 @@ async def test_version_check_route_returns_stable_payload(
     assert json.loads(response.body) == expected
 
 
-async def test_version_check_and_mcp_requests_share_the_gateway_loop(monkeypatch, tmp_path):
+async def test_version_check_and_mcp_requests_share_the_gateway_loop(monkeypatch):
     import httpx
-    from packaging.tags import Tag
 
     import nanobot
-    from nanobot.release_feed import PYPI_URL, ReleaseFeed
-    from nanobot.releases import release_filenames
+    from nanobot.repository import TAGS_URL
     from nanobot.security import network
     from nanobot.update_channel import UpdateChannel
     from nanobot.webui import version_check
@@ -830,7 +828,7 @@ async def test_version_check_and_mcp_requests_share_the_gateway_loop(monkeypatch
     requests = []
 
     def resolve(url, **_kwargs):
-        if url == f"{PYPI_URL}/json":
+        if url == TAGS_URL:
             asyncio.get_running_loop().call_soon(gateway_loop.call_soon_threadsafe, finish.set)
         return True, "", ("93.184.216.34",)
 
@@ -840,27 +838,19 @@ async def test_version_check_and_mcp_requests_share_the_gateway_loop(monkeypatch
             entered.set()
             await finish.wait()
             return httpx.Response(200, json={})
-        assert str(request.url) == f"{PYPI_URL}/json"
-        return httpx.Response(200, json={
-            "info": {"name": "nanobot-ai", "version": "0.3.5", "requires_python": ">=3.11"},
-            "urls": [{"filename": name, "size": 123, "yanked": False,
-                      "digests": {"sha256": "c" * 64},
-                      "url": f"https://files.pythonhosted.org/packages/{name}"}
-                     for name in sorted(release_filenames("0.3.5"))
-                     if name.endswith((".whl", ".tar.gz"))],
-        })
+        assert str(request.url) == TAGS_URL
+        return httpx.Response(200, json=[
+            {"name": "v0.3.5-xm.1", "commit": {"sha": "a" * 40}},
+        ])
 
     def transport():
         return network.PinnedDNSAsyncTransport(inner=httpx.MockTransport(respond))
 
     monkeypatch.setattr(network.PinnedDNSAsyncTransport, "_resolver_lock", asyncio.Lock())
     monkeypatch.setattr(network, "resolve_url_target", resolve)
-    monkeypatch.setattr(nanobot, "__version__", "0.3.5")
+    monkeypatch.setattr(nanobot, "__version__", "0.3.5+xm.1")
     monkeypatch.setattr(version_check, "read_update_channel", UpdateChannel)
-    monkeypatch.setattr(version_check, "installation_state_dir", lambda: tmp_path)
-    monkeypatch.setattr(version_check, "ReleaseFeed", lambda directory: ReleaseFeed(
-        directory, transport=transport(), supported_tags=[Tag("py3", "none", "win_amd64")],
-    ))
+    monkeypatch.setattr(version_check, "PinnedDNSAsyncTransport", transport)
     request = SimpleNamespace(path="/api/settings/version-check", headers=Headers())
 
     async with httpx.AsyncClient(transport=transport(), trust_env=False) as client:
@@ -879,7 +869,7 @@ async def test_version_check_and_mcp_requests_share_the_gateway_loop(monkeypatch
     assert json.loads(response.body) == {"updateAvailable": None}
     assert subsequent.status_code == 200
     assert requests == ["https://mcp.example/first", "https://mcp.example/second",
-                        f"{PYPI_URL}/json", "https://mcp.example/subsequent"]
+                        TAGS_URL, "https://mcp.example/subsequent"]
 
 
 @pytest.mark.asyncio

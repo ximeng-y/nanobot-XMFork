@@ -48,7 +48,6 @@ from nanobot.update_worker import (
     write_record,
 )
 
-
 OFFICIAL_TEST_VERSION = "0.4.2"
 
 

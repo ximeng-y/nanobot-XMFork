@@ -24,7 +24,6 @@ from scripts.release_candidate import (
     write_manifest,
 )
 
-
 OFFICIAL_TEST_VERSION = "0.4.2.dev1"
 
 

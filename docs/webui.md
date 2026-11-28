@@ -4,7 +4,7 @@
 
 The WebUI is nanobot's browser workbench. It is included with `nanobot-ai` and shares the same gateway, settings, and saved conversations as the terminal UI (TUI).
 
-For a visual tour, see the [README feature gallery](../README.md#-webui).
+For additions and improvements in this fork, see the [README feature list](../README.md#新增优化功能).
 
 ## Open the WebUI
 

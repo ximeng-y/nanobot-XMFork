@@ -25,9 +25,10 @@ from scripts.release_candidate import (
 )
 
 
-@pytest.fixture
-def candidate(tmp_path):
-    version = tomllib.loads((packager.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+OFFICIAL_TEST_VERSION = "0.4.2.dev1"
+
+
+def make_candidate_wheel(directory, version):
     info = f"nanobot_ai-{version}.dist-info"
     files = {
         "nanobot/__init__.py": f"__version__ = '{version}'\n".encode(),
@@ -40,14 +41,21 @@ def candidate(tmp_path):
         writer.writerow((name, packager._digest(content), len(content)))
     writer.writerow((f"{info}/RECORD", "", ""))
     files[f"{info}/RECORD"] = record.getvalue().encode()
-    wheel = tmp_path / f"nanobot_ai-{version}-py3-none-any.whl"
+    wheel = directory / f"nanobot_ai-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         for name, content in files.items():
             archive.writestr(name, content)
     return wheel, info
 
 
-def make_bundle(directory, target, *, stale_source=False, wrong_architecture=False, omit=None):
+@pytest.fixture
+def candidate(tmp_path):
+    version = tomllib.loads((packager.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    return make_candidate_wheel(tmp_path, version)
+
+
+def make_bundle(directory, target, *, stale_source=False, wrong_architecture=False, omit=None,
+                root=packager.ROOT):
     asset = f"nanobot-tui-{target}" + (".exe" if target.startswith("win32-") else "")
     binary = bytearray(128)
     if target.startswith("linux-"):
@@ -62,8 +70,8 @@ def make_bundle(directory, target, *, stale_source=False, wrong_architecture=Fal
         binary[64:70] = b"PE\x00\x00\x64\x86"
     files = {name: b"license material\n" for name in tui_launcher._TUI_RELEASE_FILES}
     files[asset] = b"wrong executable" if wrong_architecture else bytes(binary)
-    source = runpy.run_path(str(packager.ROOT / "tui/scripts/package-release.py"))
-    files["nanobot-tui-source.tar.gz"] = source["_source_archive"](packager.ROOT / "tui")
+    source = runpy.run_path(str(root / "tui/scripts/package-release.py"))
+    files["nanobot-tui-source.tar.gz"] = source["_source_archive"](root / "tui")
     if stale_source:
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode="w:gz"):
@@ -195,16 +203,32 @@ def test_installed_tui_never_downloads_or_requires_bun(tmp_path, monkeypatch, sy
 
 
 @pytest.fixture
-def complete_candidate(tmp_path, candidate):
+def complete_candidate(tmp_path):
     """Actual checkout payload, with synthetic native binaries (not native execution)."""
     from hatch_build import WebUIBuildHook
 
     root = tmp_path / "checkout"
-    subprocess.run(["git", "clone", "--shared", str(packager.ROOT), str(root)],
+    subprocess.run(["git", "-c", "core.autocrlf=false", "clone", "--shared",
+                    str(packager.ROOT), str(root)],
                    check=True, capture_output=True)
+    original = {
+        name: (root / name).read_text(encoding="utf-8")
+        for name in release_candidate.VERSION_FILES
+    }
+    changes = release_candidate._version_changes(
+        original["pyproject.toml"], original["nanobot/__init__.py"], OFFICIAL_TEST_VERSION,
+    )
+    for name, content in changes.items():
+        (root / name).write_text(content, encoding="utf-8", newline="\n")
+    subprocess.run(["git", "add", "--", *release_candidate.VERSION_FILES], cwd=root,
+                   check=True, capture_output=True)
+    subprocess.run([
+        "git", "-c", "user.name=Test", "-c", "user.email=test@example.test",
+        "-c", "commit.gpgsign=false", "commit", "-m", "Prepare complete candidate fixture",
+    ], cwd=root, check=True, capture_output=True)
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     metadata = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    wheel, info = candidate
+    wheel, info = make_candidate_wheel(tmp_path, metadata["version"])
     with zipfile.ZipFile(wheel) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
     tracked = subprocess.check_output(["git", "ls-files", "-z", "--", "nanobot"], cwd=root).decode().split("\0")
@@ -238,7 +262,7 @@ def complete_candidate(tmp_path, candidate):
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
     for target in packager.PLATFORMS:
-        make_bundle(artifacts, target)
+        make_bundle(artifacts, target, root=root)
         packager.build_wheel(wheel, artifacts, artifacts, target, root=root)
     version = metadata["version"]
     source_files = {
@@ -310,7 +334,8 @@ def test_retained_candidate_keeps_checked_bytes_and_independent_source(tmp_path,
     for original in artifacts.iterdir():
         assert (output / "artifacts" / original.name).read_bytes() == original.read_bytes()
     independent = tmp_path / "independent"
-    subprocess.run(["git", "clone", "--no-local", str(output / "source.git"), str(independent)],
+    subprocess.run(["git", "-c", "core.autocrlf=false", "clone", "--no-local",
+                    str(output / "source.git"), str(independent)],
                    check=True, capture_output=True)
     assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=independent, text=True).strip() == commit
     assert not (independent / "private-untracked.txt").exists()

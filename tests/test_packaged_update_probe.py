@@ -550,7 +550,7 @@ def test_serial_dispatch_reports_one_lane_and_checks_original_hash_at_the_end(tm
     monkeypatch.setattr(scripts.build_tui_wheels, "wheel_files", lambda *args, **kwargs: (
         {"nanobot/_build_commit.txt": b"a" * 40}, None, None))
     args = Namespace(wheel=target, baseline_wheel=None, output=tmp_path / "serial", commit="a" * 40,
-                     workers=workers, dock=False, scenario=["upgrade"])
+                     workers=workers, dock=False, scenario=["upgrade"], normalize_local_version=False)
     calls = []
     def serial(args, root, selected, version, original_hash, scenarios, timings):
         calls.append(root / "managed")
@@ -566,6 +566,61 @@ def test_serial_dispatch_reports_one_lane_and_checks_original_hash_at_the_end(tm
     monkeypatch.setattr(probe, "run_serial", mutate)
     with pytest.raises(AssertionError):
         probe.run(args)
+
+
+def test_run_derives_public_upgrade_target_from_fork_local_version(tmp_path, monkeypatch):
+    import scripts.build_tui_wheels
+
+    target = wheel(tmp_path, "0.4.2+xm.1")
+    source_hash = digest(target)
+    monkeypatch.setattr(scripts.build_tui_wheels, "wheel_files", lambda *args, **kwargs: (
+        {"nanobot/_build_commit.txt": b"a" * 40}, None, None))
+    args = Namespace(wheel=target, baseline_wheel=None, output=tmp_path / "derived", commit="a" * 40,
+                     workers=1, dock=False, scenario=["upgrade"], normalize_local_version=True)
+    calls = []
+
+    def serial(args, root, selected, version, original_hash, scenarios, timings):
+        calls.append((selected, version, original_hash))
+        return [{"scenario": "upgrade"}]
+
+    monkeypatch.setattr(probe, "run_serial", serial)
+    report = probe.run(args)
+
+    selected, version, tested_hash = calls[0]
+    assert selected.name == "nanobot_ai-0.4.2-py3-none-manylinux_2_17_x86_64.whl"
+    assert (version, tested_hash) == ("0.4.2", digest(selected))
+    assert (report["version"], report["target_sha256"]) == ("0.4.2", tested_hash)
+    assert (report["target_source_version"], report["target_source_sha256"]) == ("0.4.2+xm.1", source_hash)
+    assert report["target_derived"] is True
+    assert digest(target) == source_hash
+
+
+@pytest.mark.parametrize(("version", "normalize"), [("0.4.2+xm.1", False), ("0.4.2", True)])
+def test_run_keeps_original_target_without_a_local_version_to_normalize(
+    tmp_path, monkeypatch, version, normalize,
+):
+    import scripts.build_tui_wheels
+
+    target = wheel(tmp_path, version)
+    original_hash = digest(target)
+    monkeypatch.setattr(scripts.build_tui_wheels, "wheel_files", lambda *args, **kwargs: (
+        {"nanobot/_build_commit.txt": b"a" * 40}, None, None))
+    args = Namespace(wheel=target, baseline_wheel=None, output=tmp_path / f"original-{normalize}",
+                     commit="a" * 40, workers=1, dock=False, scenario=["upgrade"],
+                     normalize_local_version=normalize)
+    calls = []
+
+    def serial(args, root, selected, tested_version, tested_hash, scenarios, timings):
+        calls.append((selected, tested_version, tested_hash))
+        return [{"scenario": "upgrade"}]
+
+    monkeypatch.setattr(probe, "run_serial", serial)
+    report = probe.run(args)
+
+    assert calls == [(target, version, original_hash)]
+    assert (report["version"], report["target_sha256"]) == (version, original_hash)
+    assert (report["target_source_version"], report["target_source_sha256"]) == (version, original_hash)
+    assert report["target_derived"] is False
 
 
 def test_controller_error_does_not_print_exception_values_or_commands(tmp_path):

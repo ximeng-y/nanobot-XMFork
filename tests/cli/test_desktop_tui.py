@@ -10,9 +10,21 @@ import pytest
 
 from nanobot.cli import desktop_target, desktop_tui, tui_launcher
 from nanobot.cli.desktop_target import DesktopReply, DesktopTargetError
+from nanobot.installation_lock import InstallationBusyError, tui_installation_access
 
 DESKTOP_ID = "d4f6cc96-a3a2-4a68-9a45-cec04b79ab53"
 GATEWAY_ID = "d4f6cc96-a3a2-4a68-9a45-cec04b79ab54"
+
+
+@pytest.fixture(autouse=True)
+def isolate_installation_state(tmp_path, monkeypatch):
+    from nanobot import installation_lock
+
+    monkeypatch.setattr(
+        installation_lock,
+        "installation_state_dir",
+        lambda _environment=None: tmp_path / "update",
+    )
 
 
 def connection(**overrides):
@@ -96,6 +108,31 @@ def test_launcher_has_no_gateway_ownership_and_no_credentials_in_child_env(monke
     assert resolver[:3] == [sys.executable, "-I", "-S"]
     assert resolver[-1] == "--resolve"
     process.terminate.assert_not_called()
+
+
+def test_desktop_tui_holds_installation_gate_while_attached(monkeypatch):
+    monkeypatch.setattr(tui_launcher, "resolve_tui_command", lambda: ["terminal-client"])
+    monkeypatch.setattr(
+        desktop_tui.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, b"1\n", b""),
+    )
+
+    class Process:
+        def wait(self) -> int:
+            with pytest.raises(InstallationBusyError, match="Exit the native TUI"):
+                with tui_installation_access(updating=True):
+                    pytest.fail("An update was admitted while Desktop TUI was attached")
+            return 0
+
+        def poll(self) -> int:
+            return 0
+
+    monkeypatch.setattr(desktop_tui.subprocess, "Popen", lambda *args, **kwargs: Process())
+
+    assert desktop_tui.launch_desktop_tui(target()) == 0
+    with tui_installation_access(updating=True):
+        pass
 
 
 def test_protocol_probe_is_isolated_in_a_real_child(monkeypatch):

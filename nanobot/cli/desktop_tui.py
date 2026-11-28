@@ -26,6 +26,7 @@ from nanobot.cli.desktop_target import (
     DesktopTargetError,
     discover_desktop_target,
 )
+from nanobot.installation_lock import tui_installation_access
 
 PROTOCOL_VERSION = 1
 _MAX_BYTES = 8192
@@ -99,6 +100,7 @@ def resolve_request(raw: bytes) -> dict[str, object]:
     return _connection(target, gateway_id)
 
 
+@tui_installation_access()
 def launch_desktop_tui(target: DesktopTarget) -> int:
     from nanobot.cli.tui_launcher import TuiUnavailableError, resolve_tui_command
 

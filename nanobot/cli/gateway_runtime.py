@@ -612,6 +612,9 @@ def _run_claimed_gateway(
         if job.name == "dream":
             from nanobot.agent.dream import run_dream
 
+            if agent.has_foreground_work():
+                logger.info("Dream deferred because chat work is active")
+                return None
             result = await run_dream(agent, commit_prefix="dream: periodic memory consolidation")
             if result.error:
                 logger.warning("Dream did not complete ({})", result.error)

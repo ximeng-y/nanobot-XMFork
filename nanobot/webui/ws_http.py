@@ -94,6 +94,7 @@ from nanobot.webui.http_utils import (
 )
 from nanobot.webui.ingress_policy import WebUIIngressPolicy
 from nanobot.webui.media_gateway import WebUIMediaGateway
+from nanobot.webui.memory import MemoryAPIError, WebUIMemoryService
 from nanobot.webui.mutation import MutationResult
 from nanobot.webui.recovery import RecoveryActionError
 from nanobot.webui.session_automations import serialize_automation_jobs
@@ -139,6 +140,14 @@ _SLOW_WEBUI_HTTP_LOG_MS = 1_000
 _NO_STORE_HEADERS = [("Cache-Control", "no-store")]
 
 
+def _memory_http_error(status: int, message: str) -> Response:
+    return _http_response(
+        message.encode("utf-8"),
+        status=status,
+        extra_headers=_NO_STORE_HEADERS,
+    )
+
+
 def _quoted_etag(revision: str) -> str:
     return f'"{revision}"'
 
@@ -180,6 +189,8 @@ _WEBUI_MUTATION_PATHS = {
     "star_prompt.claim": "/api/webui/star-prompt/claim",
     "star_prompt.dismiss": "/api/webui/star-prompt/dismiss",
     "sidebar.update": "/api/webui/sidebar-state/update",
+    "memory.import": "/api/webui/memory/import",
+    "memory.archive.delete": "/api/webui/memory/archive/delete",
     "workspace.favorite": "/api/workspaces/favorite",
     "workspace.resolve_project": "/api/workspaces/resolve-project",
     "recovery.continue": "/api/webui/recovery/continue",
@@ -356,6 +367,7 @@ class GatewayHTTPHandler:
         bus: MessageBus,
         tokens: GatewayTokenStore,
         media: WebUIMediaGateway,
+        memory: WebUIMemoryService,
         attachments: AttachmentService,
         uploads: AttachmentHTTP,
         ingress: WebUIIngressPolicy,
@@ -385,6 +397,7 @@ class GatewayHTTPHandler:
         self.bus = bus
         self.tokens = tokens
         self.media = media
+        self.memory = memory
         self.attachments = attachments
         self.uploads = uploads
         self.ingress = ingress
@@ -476,6 +489,25 @@ class GatewayHTTPHandler:
             with self.bus.admission.activity():
                 if action.startswith("settings."):
                     return await self.settings_routes.dispatch_mutation(connection, headers, action, params)
+                if action == "memory.import":
+                    try:
+                        entry = await asyncio.to_thread(
+                            self.memory.import_file,
+                            payload.get("name"),
+                            payload.get("content_base64"),
+                        )
+                    except MemoryAPIError as exc:
+                        return MutationResult.failure(exc.status, exc.message)
+                    return MutationResult.success({"entry": entry})
+                if action == "memory.archive.delete":
+                    ids = payload.get("ids")
+                    if not isinstance(ids, list) or any(not isinstance(item, str) for item in ids):
+                        return MutationResult.failure(400, "Invalid imported file IDs")
+                    try:
+                        deleted = await asyncio.to_thread(self.memory.delete_archived, ids)
+                    except MemoryAPIError as exc:
+                        return MutationResult.failure(exc.status, exc.message)
+                    return MutationResult.success(deleted)
                 if action == "session.delete":
                     key = payload.get("key")
                     if not isinstance(key, str) or not key.strip():
@@ -605,6 +637,10 @@ class GatewayHTTPHandler:
             return response
 
         response = await self._dispatch_session_routes(request, got)
+        if response is not None:
+            return response
+
+        response = await self._dispatch_memory_routes(request, got)
         if response is not None:
             return response
 
@@ -1388,6 +1424,37 @@ class GatewayHTTPHandler:
         if m:
             return await asyncio.to_thread(self._handle_media_fetch, m.group(1), m.group(2), request)
         return None
+
+    async def _dispatch_memory_routes(
+        self,
+        request: WsRequest,
+        got: str,
+    ) -> Response | None:
+        if got not in {"/api/memory", "/api/memory/document", "/api/memory/import"}:
+            return None
+        if not self.check_api_token(request):
+            return _memory_http_error(401, "Unauthorized")
+        try:
+            query = _parse_query(request.path)
+            if got == "/api/memory":
+                if query:
+                    raise MemoryAPIError(400, "Unexpected query parameters")
+                payload = await asyncio.to_thread(self.memory.payload)
+            else:
+                key = "path" if got == "/api/memory/document" else "id"
+                values = query.get(key)
+                if set(query) != {key} or values is None or len(values) != 1:
+                    raise MemoryAPIError(400, f"Invalid {key} parameter")
+                if got == "/api/memory/document":
+                    payload = await asyncio.to_thread(self.memory.read_document, values[0])
+                else:
+                    payload = await asyncio.to_thread(self.memory.read_import, values[0])
+        except MemoryAPIError as exc:
+            return _memory_http_error(exc.status, exc.message)
+        except Exception:
+            self._log.exception("Memory API request failed")
+            return _memory_http_error(500, "Memory request failed")
+        return _http_json_response(payload, extra_headers=_NO_STORE_HEADERS)
 
     def _handle_media_fetch(
         self, sig: str, payload: str, request: WsRequest | None = None

@@ -1483,6 +1483,10 @@ class AgentLoop:
         """
         return self.bus.admission.pause_if_idle(self._has_pending_work)
 
+    def has_foreground_work(self) -> bool:
+        """Return whether chat input is waiting or a session turn is running."""
+        return bool(self.bus.inbound_size or self._pending_queues or self._active_tasks)
+
     def _has_pending_work(self) -> bool:
         return bool(
             self.bus.inbound_size or self._pending_queues

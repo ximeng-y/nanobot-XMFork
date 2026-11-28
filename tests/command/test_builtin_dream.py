@@ -32,6 +32,7 @@ class _FakeStore:
         self._dream_prompt_result = dream_prompt_result
         self.compact_history_called = False
         self.dream_lock = asyncio.Lock()
+        self.imports = SimpleNamespace(retryable_ids=lambda: [])
 
     def get_last_dream_cursor(self) -> int:
         return self._last_dream_cursor
@@ -170,6 +171,16 @@ async def test_dream_no_history_explains_how_to_create_input(tmp_path) -> None:
     assert "Dream cursor" in content
     assert "agents.defaults.idleCompactAfterMinutes" in content
     assert "/dream-prompt" in content
+
+
+@pytest.mark.asyncio
+async def test_dream_no_history_does_not_resolve_runtime(tmp_path) -> None:
+    ctx, bus = _make_dream_ctx(tmp_path)
+    ctx.loop.dream_runtime = lambda: pytest.fail("Dream runtime should not be resolved")
+
+    await _run_dream_command(ctx)
+
+    assert "Dream has no conversation history to process yet." in bus.outbound[0].content
 
 
 @pytest.mark.asyncio

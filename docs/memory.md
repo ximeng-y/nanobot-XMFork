@@ -44,6 +44,7 @@ workspace/
     ├── MEMORY.md        # Core facts and links to wiki pages
     ├── wiki/            # Optional detailed Markdown notes
     │   └── index.md     # Topic index read on demand
+    ├── imports/         # Uploaded source files waiting for or archived after Dream
     └── history.jsonl    # Recent conversation summaries
 ```
 
@@ -80,6 +81,16 @@ Use these slash commands in chat to inspect, run, or restore memory:
 
 > [!NOTE]
 > `/dream-restore <sha>` restores all managed memory files and wiki pages together (not a single page). If you have uncommitted manual edits in memory files, commit or revert them before restoring.
+
+## Browse and Import Memory
+
+Open **记忆** in the WebUI sidebar to inspect the agent's resident memory and Wiki, or to import Markdown source documents. This page always uses the current agent workspace, regardless of the project selected in a chat.
+
+The memory library is read-only. It lists `SOUL.md`, `USER.md`, `memory/MEMORY.md`, and Markdown files under `memory/wiki/`; relative links between Wiki pages can be opened in the page. Imported originals, chat history, skills, and unrelated workspace files are not part of the memory library.
+
+You can upload a UTF-8 Markdown file up to 256 KiB. The original bytes are kept under `memory/imports/`, separate from the Wiki and Git history. Uploading does not immediately change memory: the next Dream run reviews pending files with the same model preset and memory rules as chat summaries. Scheduled Dream waits until active chat work has finished; `/dream` starts a manual run immediately.
+
+An import first appears as **待整理**. After Dream reviews the complete file, it becomes **已归档**, including when the file needs no memory changes. If processing fails or cannot be confirmed, the original remains available with a short error and is retried by a later Dream run. Deleting archived imports removes only the managed original files; it does not undo memory written from them.
 
 ## Guiding Dream
 

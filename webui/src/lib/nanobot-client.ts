@@ -148,7 +148,7 @@ interface PendingWebUIRequest extends PendingRequest<unknown> {
 class WebUIMutationError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, readonly responseUnknown = false) {
     super(message);
     this.status = status;
     this.name = "WebUIMutationError";
@@ -719,6 +719,7 @@ export class NanobotClient {
           new WebUIMutationError(
             504,
             `WebUI request timed out after ${timeoutMs}ms`,
+            true,
           ),
         );
       }, timeoutMs);
@@ -1207,7 +1208,7 @@ export class NanobotClient {
       for (const pending of this.pendingWebUIRequests.values()) {
         clearTimeout(pending.timer);
         pending.reject(
-          new WebUIMutationError(503, "Socket closed before WebUI response"),
+          new WebUIMutationError(503, "Socket closed before WebUI response", true),
         );
       }
       this.pendingWebUIRequests.clear();

@@ -64,10 +64,10 @@ export function useForkUpdate(client: WebUIMutationTransport | undefined, token:
     try {
       await startForkUpdate(client, target, revision);
     } catch (reason) {
-      // An absent acknowledgement is not a refusal: keep following the exact request on reconnect.
-      if (reason instanceof ApiError && reason.status < 500) {
+      // 只有发出请求却没收到回执，才继续等待同一个更新。
+      if (!(reason instanceof ApiError && reason.responseUnknown)) {
         remember(null);
-        setError(reason.message);
+        setError(reason instanceof Error ? reason.message : t("updates.failed"));
         setPending(null);
       }
     } finally { submitting.current = false; }

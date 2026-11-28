@@ -560,6 +560,7 @@ describe("NanobotClient", () => {
     ).rejects.toMatchObject({
       status: 504,
       message: "WebUI request timed out after 25ms",
+      responseUnknown: true,
     });
     expect(socket.sent).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(25);

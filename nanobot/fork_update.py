@@ -23,6 +23,7 @@ from nanobot.installation_lock import (
     InstallationBusyError,
     installation_access,
     installation_state_dir,
+    tui_installation_access,
 )
 from nanobot.repository import ForkTarget
 from nanobot.update import (
@@ -90,13 +91,17 @@ class GatewayHandoff:
             raise ForkPreflightError("Update channel changed. Check for updates again.")
         self.preparing = True
         try:
-            peers = await asyncio.to_thread(inspect_profiles, self.profile.environment)
-            if any(p.state != "stopped" and p.receipt.id != self.profile.id for p in peers):
-                raise ForkPreflightError("Stop other gateways sharing this Python installation before updating.")
-            await asyncio.to_thread(prepare_fork_target, target)
-            if read_update_channel() != selection:
-                raise ForkPreflightError("Update channel changed. Check for updates again.")
             with ExitStack() as gate:
+                try:
+                    gate.enter_context(tui_installation_access(updating=True, environment=self.profile.environment))
+                except InstallationBusyError as exc:
+                    raise ForkPreflightError(str(exc)) from exc
+                peers = await asyncio.to_thread(inspect_profiles, self.profile.environment)
+                if any(p.state != "stopped" and p.receipt.id != self.profile.id for p in peers):
+                    raise ForkPreflightError("Stop other gateways sharing this Python installation before updating.")
+                await asyncio.to_thread(prepare_fork_target, target)
+                if read_update_channel() != selection:
+                    raise ForkPreflightError("Update channel changed. Check for updates again.")
                 gate.enter_context(self.maintenance())
                 assert self.profile.launch is not None and _owner is not None
                 if self.profile.launch.lifetime == "on_demand":

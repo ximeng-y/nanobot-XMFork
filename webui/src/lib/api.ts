@@ -82,7 +82,7 @@ function isSlashCommandLifecycle(value: unknown): value is SlashCommandLifecycle
 }
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, readonly responseUnknown = false) {
     super(message);
     this.status = status;
     this.name = "ApiError";
@@ -200,7 +200,9 @@ async function mutation<T>(
       && typeof reason.status === "number"
     ) ? reason.status : 500;
     const message = reason instanceof Error ? reason.message : "WebUI mutation failed";
-    throw new ApiError(status, message);
+    const responseUnknown = typeof reason === "object" && reason !== null
+      && "responseUnknown" in reason && reason.responseUnknown === true;
+    throw new ApiError(status, message, responseUnknown);
   }
 }
 

@@ -27,6 +27,7 @@ from nanobot.installation_lock import (
     installation_access,
     installation_state_dir,
     pending_update_path,
+    tui_installation_access,
 )
 from nanobot.release_feed import ReleaseFeed
 from nanobot.releases import release_filenames
@@ -77,6 +78,13 @@ async def test_fork_mutation_hands_displayed_target_to_original_launcher(review_
         denied = await gateway.http.dispatch_webui_mutation(connection(), action, payload)
         assert denied.status_code == 403
         verified.assert_not_called()
+        with tui_installation_access(environment=receipt.environment):
+            blocked = await gateway.http.dispatch_webui_mutation(connection(local=True), action, payload)
+            assert blocked.status_code == 409
+            assert "Exit the native TUI" in blocked.message
+            assert not stop.is_set() and not admission.paused
+            assert fork_update.status()["last"] is None
+            verified.assert_not_called()
         with admission.activity():
             busy = await gateway.http.dispatch_webui_mutation(connection(local=True), action, payload)
             assert busy.status_code == 409 and not stop.is_set()

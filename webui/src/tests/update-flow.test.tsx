@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { useForkUpdate } from "@/hooks/useForkUpdate";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import type { NanobotClient } from "@/lib/nanobot-client";
+import { NanobotClient } from "@/lib/nanobot-client";
 import type { ConnectionStatus } from "@/lib/types";
 import { UpdateFlowProvider, useUpdateFlow } from "@/providers/UpdateFlowProvider";
 import { ClientProvider } from "@/providers/ClientProvider";
@@ -58,6 +58,38 @@ beforeEach(() => {
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); });
 
 describe("Real update consent and recovery", () => {
+  it("retries an unsent Fork update after reconnect, but follows an update whose acknowledgement was lost", async () => {
+    vi.useFakeTimers();
+    const target = { tag: "v0.4.2-xm.3", commit: "a".repeat(40) };
+    const socket = { readyState: 0, send: vi.fn(), close: vi.fn() };
+    const transport = new NanobotClient({
+      url: "ws://test", reconnect: false, socketFactory: () => socket as unknown as WebSocket,
+    });
+    transport.connect();
+    const mounted = renderHook(() => useForkUpdate(transport, "gateway-a"));
+    await act(() => mounted.result.current.apply(target, "0.4.2+xm.3", 0));
+    expect(socket.send).not.toHaveBeenCalled();
+    expect(mounted.result.current.busy).toBe(false);
+    expect(mounted.result.current.error).toBe("WebUI connection is not open");
+    mounted.unmount();
+
+    const retried = renderHook(() => useForkUpdate(transport, "gateway-a"));
+    expect(retried.result.current.busy).toBe(false);
+    socket.readyState = 1;
+    await act(async () => {
+      const sent = retried.result.current.apply(target, "0.4.2+xm.3", 0);
+      expect(socket.send).toHaveBeenCalledOnce();
+      transport.close();
+      await sent;
+    });
+    expect(retried.result.current.busy).toBe(true);
+    expect(retried.result.current.error).toBe("");
+    vi.mocked(api.readForkUpdate).mockResolvedValue({
+      runningVersion: "0.4.2+xm.2", last: { ...target, phase: "failed" },
+    });
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(retried.result.current.error).toBe("Update did not finish");
+  });
   it("keeps following the exact Fork update with the new gateway credential without installing again", async () => {
     vi.useFakeTimers();
     const target = { tag: "v0.4.2-xm.3", commit: "a".repeat(40) };

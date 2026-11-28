@@ -23,6 +23,14 @@ from nanobot.cli.tui_launcher import (
     resolve_tui_command,
 )
 from nanobot.config.schema import Config, ModelPresetConfig
+from nanobot.installation_lock import InstallationBusyError, tui_installation_access
+
+
+@pytest.fixture(autouse=True)
+def isolate_installation_state(tmp_path, monkeypatch):
+    from nanobot import installation_lock
+
+    monkeypatch.setattr(installation_lock, "installation_state_dir", lambda _environment=None: tmp_path / "update")
 
 
 def _release_archive(
@@ -115,6 +123,9 @@ def test_launcher_passes_the_canonical_model_preset_to_the_tui(
 
     class FakeProcess:
         def wait(self) -> int:
+            with pytest.raises(InstallationBusyError, match="Exit the native TUI"):
+                with tui_installation_access(updating=True):
+                    pytest.fail("An update was admitted while the TUI was running")
             events.append("waited")
             return 0
 
@@ -135,6 +146,8 @@ def test_launcher_passes_the_canonical_model_preset_to_the_tui(
     )
 
     assert result == 0
+    with tui_installation_access(updating=True):
+        assert events == ["spawned", "waited"]
     assert captured["NANOBOT_TUI_MODEL"] == "openai/gpt-5.6"
     assert captured["NANOBOT_TUI_MODEL_PRESET"] == "Deep Research"
     assert captured["NANOBOT_TUI_WORKSPACE"] == str(Path.cwd().resolve())
@@ -147,7 +160,6 @@ def test_launcher_passes_the_canonical_model_preset_to_the_tui(
     assert "NANOBOT_TUI_API_TOKEN" not in captured
     assert "NANOBOT_TUI_CHAT_ID" not in captured
     assert "NANOBOT_TUI_STATE_PATH" not in captured
-    assert events == ["spawned", "waited"]
     assert released == [True]
 
 

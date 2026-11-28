@@ -453,7 +453,8 @@
       "ariaLabel": "Ganti bahasa"
     },
     "apps": "Aplikasi",
-    "automations": "Otomasi"
+    "automations": "Otomasi",
+    "memory": "Memori"
   },
   "settings": {
     "timezoneNoMatches": "Tidak ada zona waktu yang cocok.",
@@ -2663,6 +2664,68 @@
       "retry": "Coba lagi",
       "cancel": "Batal",
       "switchDirectory": "Ganti direktori"
+    }
+  },
+  "memory": {
+    "title": "Memori",
+    "description": "Telusuri memori tetap dan wiki Agent saat ini, atau impor Markdown agar Dream mengaturnya.",
+    "scope": "Ruang kerja Agent saat ini",
+    "refresh": "Segarkan",
+    "refreshing": "Menyegarkan…",
+    "tabs": {
+      "library": "Perpustakaan",
+      "imports": "Impor dan arsip",
+      "ariaLabel": "Tampilan memori"
+    },
+    "library": {
+      "resident": "Memori tetap",
+      "wiki": "Wiki",
+      "wikiIndex": "Beranda Wiki",
+      "empty": "Belum ada file memori.",
+      "loading": "Memuat memori…",
+      "loadError": "Tidak dapat memuat memori.",
+      "documentLoading": "Memuat dokumen…",
+      "documentError": "Tidak dapat memuat dokumen ini.",
+      "backToFiles": "File",
+      "selectFile": "Pilih file dari daftar untuk membacanya.",
+      "linkUnavailable": "Tautan ini bukan bagian dari perpustakaan memori."
+    },
+    "imports": {
+      "dreamHint": "Dream mengatur impor secara otomatis. Anda juga dapat menggunakan /dream di chat.",
+      "chooseFiles": "Pilih file Markdown",
+      "uploading": "Mengunggah…",
+      "uploaded": "Terunggah",
+      "uploadFailed": "Tidak terunggah",
+      "maxSize": "Maksimal {{size}} per file.",
+      "uploadSummary": "{{succeeded}} berhasil diunggah; {{failed}} gagal.",
+      "status": {
+        "pending": "Menunggu",
+        "failed": "Gagal",
+        "archived": "Diarsipkan"
+      },
+      "importedAt": "Diimpor {{date}}",
+      "archivedAt": "Diarsipkan {{date}}",
+      "preview": "Pratinjau asli",
+      "delete": "Hapus",
+      "previewTitle": "Impor asli",
+      "previewLoading": "Memuat file asli…",
+      "previewError": "Tidak dapat memuat file asli.",
+      "pending": "Menunggu",
+      "archived": "Diarsipkan",
+      "emptyPending": "Tidak ada file yang menunggu diatur.",
+      "emptyArchived": "Belum ada impor yang diarsipkan.",
+      "selectFile": "Pilih {{name}}",
+      "deleteSelected": "Hapus yang dipilih ({{count}})",
+      "selectedCount": "{{count}} dipilih",
+      "clearSelection": "Hapus pilihan",
+      "deleteConfirmTitle": "Hapus impor?",
+      "deleteConfirmDescription": "Hanya file asli yang dipilih yang dihapus. Memori yang sudah ditulis dari file tersebut tidak akan ditarik kembali.",
+      "deleteSuccess": "{{count}} impor dihapus.",
+      "deletePartial": "{{deleted}} dihapus; {{failed}} tidak dapat dihapus.",
+      "deleteError": "Tidak dapat menghapus impor yang dipilih.",
+      "deleteFailedItem": "{{name}} tidak dihapus.",
+      "onlyMarkdown": "Hanya file .md yang dapat diimpor.",
+      "tooLarge": "File lebih besar dari {{size}}."
     }
   }
 }

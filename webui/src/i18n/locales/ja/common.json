@@ -453,7 +453,8 @@
       "ariaLabel": "言語を変更"
     },
     "apps": "アプリ",
-    "automations": "自動タスク"
+    "automations": "自動タスク",
+    "memory": "メモリー"
   },
   "settings": {
     "timezoneNoMatches": "一致するタイムゾーンがありません。",
@@ -2663,6 +2664,68 @@
       "retry": "再試行",
       "cancel": "キャンセル",
       "switchDirectory": "ディレクトリ切り替え"
+    }
+  },
+  "memory": {
+    "title": "メモリー",
+    "description": "現在の Agent の常駐メモリーと Wiki を閲覧し、Markdown を Dream に整理させるためにインポートできます。",
+    "scope": "現在の Agent ワークスペース",
+    "refresh": "更新",
+    "refreshing": "更新中…",
+    "tabs": {
+      "library": "ライブラリ",
+      "imports": "インポートとアーカイブ",
+      "ariaLabel": "メモリー表示"
+    },
+    "library": {
+      "resident": "常駐メモリー",
+      "wiki": "Wiki",
+      "wikiIndex": "Wiki ホーム",
+      "empty": "メモリーファイルはまだありません。",
+      "loading": "メモリーを読み込み中…",
+      "loadError": "メモリーを読み込めませんでした。",
+      "documentLoading": "ドキュメントを読み込み中…",
+      "documentError": "このドキュメントを読み込めませんでした。",
+      "backToFiles": "ファイル",
+      "selectFile": "一覧からファイルを選ぶと内容を表示します。",
+      "linkUnavailable": "このリンクは現在のメモリーライブラリに含まれていません。"
+    },
+    "imports": {
+      "dreamHint": "Dream がインポートを自動整理します。チャットで /dream を入力することもできます。",
+      "chooseFiles": "Markdown ファイルを選択",
+      "uploading": "アップロード中…",
+      "uploaded": "アップロード済み",
+      "uploadFailed": "アップロード失敗",
+      "maxSize": "1ファイルあたり最大 {{size}}。",
+      "uploadSummary": "{{succeeded}} 件アップロード、{{failed}} 件失敗。",
+      "status": {
+        "pending": "未整理",
+        "failed": "失敗",
+        "archived": "アーカイブ済み"
+      },
+      "importedAt": "{{date}} にインポート",
+      "archivedAt": "{{date}} にアーカイブ",
+      "preview": "原文を表示",
+      "delete": "削除",
+      "previewTitle": "インポート原文",
+      "previewLoading": "原文を読み込み中…",
+      "previewError": "原文を読み込めませんでした。",
+      "pending": "未整理",
+      "archived": "アーカイブ済み",
+      "emptyPending": "整理待ちのファイルはありません。",
+      "emptyArchived": "アーカイブされたインポートはありません。",
+      "selectFile": "{{name}} を選択",
+      "deleteSelected": "選択項目を削除（{{count}}）",
+      "selectedCount": "{{count}} 件選択中",
+      "clearSelection": "選択を解除",
+      "deleteConfirmTitle": "インポートを削除しますか？",
+      "deleteConfirmDescription": "選択した原文だけを削除します。すでに書き込まれたメモリーは取り消されません。",
+      "deleteSuccess": "{{count}} 件のインポートを削除しました。",
+      "deletePartial": "{{deleted}} 件を削除しました。{{failed}} 件は削除できませんでした。",
+      "deleteError": "選択したインポートを削除できませんでした。",
+      "deleteFailedItem": "{{name}} は削除されませんでした。",
+      "onlyMarkdown": ".md ファイルのみインポートできます。",
+      "tooLarge": "ファイルが {{size}} を超えています。"
     }
   }
 }

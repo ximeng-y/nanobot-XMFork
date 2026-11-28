@@ -137,6 +137,22 @@ describe("MarkdownTextRenderer", () => {
     );
   });
 
+  it("resolves document-relative links before opening them", () => {
+    const onOpenFilePreview = vi.fn();
+    render(
+      <MarkdownTextRenderer documentPath="memory/MEMORY.md" onOpenFilePreview={onOpenFilePreview}>
+        {"[Setup](wiki/Guides/Setup.md)"}
+      </MarkdownTextRenderer>,
+    );
+
+    const reference = screen.getByTestId("inline-file-path");
+    expect(reference).toHaveAttribute("aria-label", "memory/wiki/Guides/Setup.md");
+
+    fireEvent.click(reference);
+
+    expect(onOpenFilePreview).toHaveBeenCalledWith("memory/wiki/Guides/Setup.md");
+  });
+
   it.each([
     { kind: "inferred", markdown: "Future file: `notes/missing.md`", path: "notes/missing.md", label: "notes/missing.md" },
     { kind: "explicit", markdown: "[Future report](notes/missing.md)", path: "notes/missing.md", label: "Future report" },

@@ -453,7 +453,8 @@
       "ariaLabel": "Trocar idioma"
     },
     "apps": "Aplicativos",
-    "automations": "Automações"
+    "automations": "Automações",
+    "memory": "Memória"
   },
   "settings": {
     "timezoneNoMatches": "Nenhum fuso horário encontrado.",
@@ -2665,6 +2666,68 @@
       "retry": "Tentar novamente",
       "cancel": "Cancelar",
       "switchDirectory": "Trocar diretório"
+    }
+  },
+  "memory": {
+    "title": "Memória",
+    "description": "Veja a memória permanente e o wiki do agente atual, ou importe arquivos Markdown para o Dream organizar.",
+    "scope": "Espaço de trabalho do agente atual",
+    "refresh": "Atualizar",
+    "refreshing": "Atualizando…",
+    "tabs": {
+      "library": "Biblioteca",
+      "imports": "Importar e arquivar",
+      "ariaLabel": "Visualizações de memória"
+    },
+    "library": {
+      "resident": "Memória permanente",
+      "wiki": "Wiki",
+      "wikiIndex": "Início do wiki",
+      "empty": "Ainda não há arquivos de memória.",
+      "loading": "Carregando memória…",
+      "loadError": "Não foi possível carregar a memória.",
+      "documentLoading": "Carregando documento…",
+      "documentError": "Não foi possível carregar este documento.",
+      "backToFiles": "Arquivos",
+      "selectFile": "Escolha um arquivo na lista para lê-lo.",
+      "linkUnavailable": "Este link não faz parte da biblioteca de memória."
+    },
+    "imports": {
+      "dreamHint": "O Dream organiza as importações automaticamente. Você também pode usar /dream no chat.",
+      "chooseFiles": "Escolher arquivos Markdown",
+      "uploading": "Enviando…",
+      "uploaded": "Enviado",
+      "uploadFailed": "Não enviado",
+      "maxSize": "Até {{size}} por arquivo.",
+      "uploadSummary": "{{succeeded}} enviado(s); {{failed}} com falha.",
+      "status": {
+        "pending": "Pendente",
+        "failed": "Falhou",
+        "archived": "Arquivado"
+      },
+      "importedAt": "Importado em {{date}}",
+      "archivedAt": "Arquivado em {{date}}",
+      "preview": "Ver original",
+      "delete": "Excluir",
+      "previewTitle": "Importação original",
+      "previewLoading": "Carregando original…",
+      "previewError": "Não foi possível carregar o arquivo original.",
+      "pending": "Pendentes",
+      "archived": "Arquivados",
+      "emptyPending": "Nenhum arquivo aguardando organização.",
+      "emptyArchived": "Nenhuma importação arquivada.",
+      "selectFile": "Selecionar {{name}}",
+      "deleteSelected": "Excluir selecionados ({{count}})",
+      "selectedCount": "{{count}} selecionado(s)",
+      "clearSelection": "Limpar seleção",
+      "deleteConfirmTitle": "Excluir importações?",
+      "deleteConfirmDescription": "Apenas os arquivos originais selecionados serão excluídos. As memórias já escritas a partir deles não serão removidas.",
+      "deleteSuccess": "{{count}} importação(ões) excluída(s).",
+      "deletePartial": "{{deleted}} excluída(s); não foi possível excluir {{failed}}.",
+      "deleteError": "Não foi possível excluir as importações selecionadas.",
+      "deleteFailedItem": "{{name}} não foi excluído.",
+      "onlyMarkdown": "Apenas arquivos .md podem ser importados.",
+      "tooLarge": "O arquivo excede {{size}}."
     }
   }
 }

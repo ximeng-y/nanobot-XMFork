@@ -128,6 +128,10 @@ const SessionSearchDialog = lazy(async () => {
   const module = await import("@/components/SessionSearchDialog");
   return { default: module.SessionSearchDialog };
 });
+const MemoryPage = lazy(async () => {
+  const module = await import("@/components/memory/MemoryPage");
+  return { default: module.MemoryPage };
+});
 const RenameDialog = lazy(async () => {
   const module = await import("@/components/RenameDialog");
   return { default: module.RenameDialog };
@@ -555,7 +559,7 @@ function Shell({
   const [settingsLoading, setSettingsLoading] = useState(true);
   const settingsSnapshotRef = useRef(settingsSnapshot);
   settingsSnapshotRef.current = settingsSnapshot;
-  const settingsOwnsSnapshot = view !== "chat" && view !== "remote";
+  const settingsOwnsSnapshot = view === "settings" || view === "apps" || view === "automations";
   const settingsRefreshGenerationRef = useRef(0);
   const [pendingAutomationMessage, setPendingAutomationMessage] = useState<{
     id: string;
@@ -1490,6 +1494,12 @@ function Shell({
     setMobileSidebarOpen(false);
   }, [activeKey, navigate]);
 
+  const onOpenMemory = useCallback(() => {
+    setSessionSearchOpen(false);
+    navigate({ view: "memory", activeKey, settingsSection: "overview" });
+    setMobileSidebarOpen(false);
+  }, [activeKey, navigate]);
+
   useEffect(() => {
     const actions = { newChat: onNewChat, search: onOpenSessionSearch, apps: onOpenApps,
       automations: onOpenAutomations, settings: () => onOpenSettings() };
@@ -2090,6 +2100,12 @@ function Shell({
       });
       return;
     }
+    if (view === "memory") {
+      document.title = t("app.documentTitle.chat", {
+        title: t("memory.title", { defaultValue: "Memory" }),
+      });
+      return;
+    }
     if (view === "remote") {
       document.title = t("app.documentTitle.chat", { title: t("remote.title") });
       return;
@@ -2155,9 +2171,12 @@ function Shell({
       : undefined,
     onOpenApps,
     onOpenAutomations,
+    onOpenMemory,
     onSettingsIntent,
     onOpenSearch: onOpenSessionSearch,
-    activeUtility: !managingConnections && (view === "apps" || view === "automations") ? view : null,
+    activeUtility: !managingConnections && (view === "apps" || view === "automations" || view === "memory")
+      ? view
+      : null,
     onToggleArchived,
     pinnedKeys: sidebarPinnedTabKeys,
     archivedKeys: sidebarArchivedTabKeys,
@@ -2483,7 +2502,13 @@ function Shell({
                   mainNavigationExpanded={showMainSidebar && hostSidebarOpen}
                   hostChromeInset={showHostChrome}
                   onBackToChat={onBackToChat}
-                /> : <Suspense fallback={<StartupShell embedded surface={view === "apps" && isAppsSection(settingsInitialSection) ? settingsInitialSection : view} sidebarExpanded={hostSidebarOpen} />}>
+                /> : view === "memory" ? <Suspense fallback={<StartupShell embedded surface="memory" sidebarExpanded={hostSidebarOpen} />}>
+                  <MemoryPage
+                    mainNavigationExpanded={showMainSidebar && hostSidebarOpen}
+                    hostChromeInset={showHostChrome}
+                    onBackToChat={onBackToChat}
+                  />
+                </Suspense> : <Suspense fallback={<StartupShell embedded surface={view === "apps" && isAppsSection(settingsInitialSection) ? settingsInitialSection : view} sidebarExpanded={hostSidebarOpen} />}>
                   <SettingsView
                     registerExitGuard={registerSettingsExitGuard}
                     themePreference={themePreference}

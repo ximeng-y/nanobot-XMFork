@@ -453,7 +453,8 @@
       "ariaLabel": "切换语言"
     },
     "apps": "应用",
-    "automations": "任务"
+    "automations": "任务",
+    "memory": "记忆"
   },
   "settings": {
     "timezoneNoMatches": "没有匹配的时区。",
@@ -2845,6 +2846,68 @@
       "retry": "重试",
       "cancel": "取消",
       "switchDirectory": "切换目录"
+    }
+  },
+  "memory": {
+    "title": "记忆",
+    "description": "浏览当前 Agent 的常驻记忆与 Wiki，也可以导入 Markdown 交给 Dream 整理。",
+    "scope": "当前 Agent 工作区",
+    "refresh": "刷新",
+    "refreshing": "正在刷新…",
+    "tabs": {
+      "library": "记忆库",
+      "imports": "导入与归档",
+      "ariaLabel": "记忆页面"
+    },
+    "library": {
+      "resident": "常驻记忆",
+      "wiki": "Wiki",
+      "wikiIndex": "Wiki 首页",
+      "empty": "还没有记忆文件。",
+      "loading": "正在加载记忆…",
+      "loadError": "无法加载记忆。",
+      "documentLoading": "正在加载文档…",
+      "documentError": "无法加载这份文档。",
+      "backToFiles": "文件",
+      "selectFile": "从左侧列表选择文件即可阅读。",
+      "linkUnavailable": "这个链接不在当前记忆库中。"
+    },
+    "imports": {
+      "dreamHint": "由 Dream 自动整理，也可在聊天输入 /dream。",
+      "chooseFiles": "选择 Markdown 文件",
+      "uploading": "正在上传…",
+      "uploaded": "已上传",
+      "uploadFailed": "上传失败",
+      "maxSize": "每个文件最大 {{size}}。",
+      "uploadSummary": "{{succeeded}} 个上传成功，{{failed}} 个失败。",
+      "status": {
+        "pending": "待整理",
+        "failed": "失败",
+        "archived": "已归档"
+      },
+      "importedAt": "导入于 {{date}}",
+      "archivedAt": "归档于 {{date}}",
+      "preview": "预览原文",
+      "delete": "删除",
+      "previewTitle": "导入原文",
+      "previewLoading": "正在加载原文…",
+      "previewError": "无法加载原文。",
+      "pending": "待整理",
+      "archived": "已归档",
+      "emptyPending": "没有等待整理的文件。",
+      "emptyArchived": "还没有归档原文。",
+      "selectFile": "选择 {{name}}",
+      "deleteSelected": "删除所选（{{count}}）",
+      "selectedCount": "已选 {{count}} 项",
+      "clearSelection": "取消选择",
+      "deleteConfirmTitle": "删除导入原文？",
+      "deleteConfirmDescription": "只会删除所选原文，已写入的记忆不会撤回。",
+      "deleteSuccess": "已删除 {{count}} 份原文。",
+      "deletePartial": "已删除 {{deleted}} 份，{{failed}} 份未能删除。",
+      "deleteError": "未能删除所选原文。",
+      "deleteFailedItem": "{{name}} 未能删除。",
+      "onlyMarkdown": "只能导入 .md 文件。",
+      "tooLarge": "文件超过 {{size}}。"
     }
   }
 }

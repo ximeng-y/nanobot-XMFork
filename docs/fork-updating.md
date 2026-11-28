@@ -31,7 +31,16 @@ python -m pip install -e .
 python -m nanobot --version
 ```
 
-On Windows, `start-webui.cmd` refreshes the editable source installation and its launcher-local environment when you start it. Restart the gateway through the same local service or process you used before the update.
+If the gateway runs as a background service and serves the WebUI directly, rebuild the production frontend from the target tag before restarting it. An editable Python install does not refresh the existing WebUI bundle, and a non-interactive gateway start only warns about stale assets:
+
+```bash
+cd webui
+bun install --frozen-lockfile
+bun run build
+cd ..
+```
+
+The build writes the target tag's frontend to `nanobot/web/dist/`. Rebuild it before every update that may change WebUI source, then restart the gateway through the same local service or process you used before the update. On Windows, an interactive `start-webui.cmd` launch offers to rebuild stale assets in its launcher-local environment.
 
 ## Update Docker Compose
 
@@ -56,8 +65,8 @@ Recreating the service does not remove the bind-mounted data directory.
 
 ## Verify and Roll Back
 
-After restarting, confirm the running version under **Settings → About** or with the `python -m nanobot --version` command above.
+After restarting, confirm the Python version under **Settings → About** or with the `python -m nanobot --version` command above. Reload the browser and check that the WebUI still loads correctly after any frontend rebuild.
 
-To roll back, check out the previous Fork tag, run `python -m pip install -e .` for a source checkout, or rebuild and recreate the Compose service, then verify the version again.
+To roll back, check out the previous Fork tag. For a source checkout, run `python -m pip install -e .`, and rebuild `webui/` with the same `bun install --frozen-lockfile` and `bun run build` commands before restarting the gateway. For Docker Compose, rebuild and recreate the service. In both cases, verify the version and reload the WebUI again.
 
 Official-installer, `pipx`, `uv` tool, and PyPI virtual-environment installations have no matching Fork package. Use a Fork source checkout or Docker Compose deployment to receive these tag updates; package-manager upgrades continue to install upstream releases.

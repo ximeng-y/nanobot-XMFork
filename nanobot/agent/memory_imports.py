@@ -129,6 +129,14 @@ class MemoryImportStore:
             self.workspace.mkdir(parents=True)
         if not self.workspace.is_dir():
             raise MemoryImportError(500, "Memory import storage is unavailable")
+        if is_path_link(self.workspace):
+            raise MemoryImportError(500, "Memory import storage is unavailable")
+        try:
+            workspace_resolved = self.workspace.resolve(strict=True)
+        except OSError as exc:
+            raise MemoryImportError(500, "Memory import storage is unavailable") from exc
+        if workspace_resolved != self.workspace:
+            raise MemoryImportError(500, "Memory import storage is unavailable")
         current = self.workspace
         for part in relative.parts:
             current = current / part

@@ -72,7 +72,7 @@ def test_import_rejects_symlinked_memory_root(tmp_path, create_symlink):
     assert list(outside.iterdir()) == []
 
 
-@pytest.mark.parametrize("linked_dir", ["root", "archive"])
+@pytest.mark.parametrize("linked_dir", ["workspace", "root", "archive"])
 def test_import_store_rejects_redirected_managed_directory(
     tmp_path, create_symlink, linked_dir,
 ):
@@ -83,7 +83,14 @@ def test_import_store_rejects_redirected_managed_directory(
     store_b.archive(foreign["id"])
     foreign_content = store_b.read_import(foreign["id"])[1]
 
-    if linked_dir == "root":
+    if linked_dir == "workspace":
+        shutil.rmtree(store_a.workspace)
+        create_symlink(
+            store_a.workspace,
+            store_b.workspace,
+            target_is_directory=True,
+        )
+    elif linked_dir == "root":
         shutil.rmtree(store_a.root)
         create_symlink(store_a.root, store_b.root, target_is_directory=True)
     else:
@@ -94,7 +101,7 @@ def test_import_store_rejects_redirected_managed_directory(
             target_is_directory=True,
         )
 
-    if linked_dir == "root":
+    if linked_dir in {"workspace", "root"}:
         assert store_a.list_entries() == []
         with pytest.raises(MemoryImportError):
             store_a.import_bytes("blocked.md", encoded(b"# Blocked\n"))

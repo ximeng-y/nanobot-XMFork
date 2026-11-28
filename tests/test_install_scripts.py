@@ -527,6 +527,20 @@ def test_public_installer_accepts_verified_exact_preview(sandbox, owner, existin
     assert (sandbox["cwd"] / artifact.filename).is_file()
 
 
+def test_public_installer_accepts_explicit_local_version_wheel(sandbox):
+    version = "0.4.2+xm.1"
+    platform = next(tag.platform for tag in sys_tags() if tag.platform in releases.PLATFORMS.values())
+    wheel = _wheel(sandbox["cwd"], version, platform=platform)
+    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    result = _installer(sandbox, "-Wheel" if WINDOWS else "--wheel", str(wheel),
+                        "-Sha256" if WINDOWS else "--sha256", digest)
+    identity = _identity(result)
+    prefix = sandbox["root"] / "managed"
+    assert identity["version"] == version
+    assert Path(identity["prefix"]).resolve() == prefix
+    assert Path(identity["python"]).absolute() == _python(prefix)
+
+
 def test_public_installer_rejects_damaged_wheel_before_environment_creation(sandbox):
     _expose(sandbox, "uv")
     _, artifact = _preview_manifest(sandbox, damaged_hash=True)

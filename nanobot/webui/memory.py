@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,7 @@ class WebUIMemoryService:
             return None
         return parts
 
-    def _path_has_links(self, root: Path, parts: list[str]) -> bool:
+    def _path_has_links(self, root: Path, parts: Sequence[str]) -> bool:
         current = root
         for part in parts:
             current = current / part

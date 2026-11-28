@@ -58,22 +58,26 @@ async def run_dream(loop: AgentLoop, *, commit_prefix: str) -> DreamResult:
 
         try:
             import_ids = store.imports.retryable_ids()
-            history = store.build_dream_prompt()
-            if history is not None:
-                result.had_input = True
-                prompt, last_cursor = history
-                response = await loop.process_direct(
-                    prompt,
-                    session_key=MemoryStore.dream_session_key(),
-                    ephemeral=True,
-                    tools=store.build_dream_tools(),
-                    on_progress=silent,
-                    runtime=get_runtime(),
-                )
-                if MemoryStore.dream_run_completed(response):
-                    store.set_last_dream_cursor(last_cursor)
-                else:
-                    result.error = MemoryStore.dream_incompletion_reason(response)
+            try:
+                history = store.build_dream_prompt()
+                if history is not None:
+                    result.had_input = True
+                    prompt, last_cursor = history
+                    response = await loop.process_direct(
+                        prompt,
+                        session_key=MemoryStore.dream_session_key(),
+                        ephemeral=True,
+                        tools=store.build_dream_tools(),
+                        on_progress=silent,
+                        runtime=get_runtime(),
+                    )
+                    if MemoryStore.dream_run_completed(response):
+                        store.set_last_dream_cursor(last_cursor)
+                    else:
+                        result.error = MemoryStore.dream_incompletion_reason(response)
+            except Exception as exc:
+                result.error = str(exc)
+                logger.exception("Dream history range failed")
 
             for import_id in import_ids:
                 result.had_input = True

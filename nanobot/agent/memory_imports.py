@@ -118,12 +118,14 @@ class MemoryImportStore:
         ):
             self._ensure_managed_dir(path)
 
-    def _ensure_managed_dir(self, path: Path) -> None:
+    def _managed_dir(self, path: Path, *, create: bool = False) -> Path:
         try:
             relative = path.relative_to(self.workspace)
         except ValueError as exc:
             raise MemoryImportError(500, "Memory import storage is unavailable") from exc
         if not self.workspace.exists():
+            if not create:
+                raise MemoryImportError(500, "Memory import storage is unavailable")
             self.workspace.mkdir(parents=True)
         if not self.workspace.is_dir():
             raise MemoryImportError(500, "Memory import storage is unavailable")
@@ -135,10 +137,16 @@ class MemoryImportStore:
             if current.exists():
                 if not current.is_dir():
                     raise MemoryImportError(500, "Memory import storage is unavailable")
-            else:
+            elif create:
                 current.mkdir()
-        if not path.is_dir():
+            else:
+                raise MemoryImportError(500, "Memory import storage is unavailable")
+        if not current.is_dir():
             raise MemoryImportError(500, "Memory import storage is unavailable")
+        return current
+
+    def _ensure_managed_dir(self, path: Path) -> None:
+        self._managed_dir(path, create=True)
 
     @staticmethod
     def _now() -> str:
@@ -241,7 +249,9 @@ class MemoryImportStore:
         return import_id
 
     def _safe_entry_dir(self, root: Path, import_id: str) -> Path | None:
-        if is_path_link(root):
+        try:
+            root = self._managed_dir(root)
+        except MemoryImportError:
             return None
         candidate = root / import_id
         if is_path_link(candidate):
@@ -259,7 +269,9 @@ class MemoryImportStore:
         archived: bool,
     ) -> list[tuple[dict[str, Any], Path, _ImportMetadata]]:
         entries: list[tuple[dict[str, Any], Path, _ImportMetadata]] = []
-        if is_path_link(root):
+        try:
+            root = self._managed_dir(root)
+        except MemoryImportError:
             return entries
         try:
             children = list(root.iterdir())
@@ -284,8 +296,8 @@ class MemoryImportStore:
     def import_bytes(self, name: object, content_base64: object) -> dict[str, Any]:
         """Persist one validated raw Markdown document and return its entry."""
         display_name, data = self._decode_import(name, content_base64)
-        if is_path_link(self._staging_dir) or is_path_link(self.pending_dir):
-            raise MemoryImportError(500, "Memory import storage is unavailable")
+        self._ensure_managed_dir(self._staging_dir)
+        self._ensure_managed_dir(self.pending_dir)
         import_id = uuid4().hex
         metadata = _ImportMetadata(
             name=display_name,
@@ -353,6 +365,7 @@ class MemoryImportStore:
         metadata = self._read_metadata(pending)
         if metadata is None:
             raise MemoryImportError(404, "Imported file not found")
+        archive_root = self._managed_dir(self.archive_dir)
         archived = _ImportMetadata(
             name=metadata.name,
             size=metadata.size,
@@ -361,7 +374,7 @@ class MemoryImportStore:
         )
         try:
             self._write_metadata(pending, archived)
-            target = self.archive_dir / valid_id
+            target = archive_root / valid_id
             if target.exists() or is_path_link(target):
                 raise MemoryImportError(409, "Imported file is already archived")
             pending.rename(target)
@@ -395,12 +408,15 @@ class MemoryImportStore:
         return self._entry_payload(valid_id, failed, archived=False)
 
     def delete_archived(self, ids: object) -> dict[str, list[str]]:
-        if not isinstance(ids, list) or len(ids) > 1000:
+        if not isinstance(ids, list):
+            raise MemoryImportError(400, "Invalid imported file IDs")
+        raw_ids = cast(list[object], ids)
+        if len(raw_ids) > 1000:
             raise MemoryImportError(400, "Invalid imported file IDs")
         deleted: list[str] = []
         failed: list[str] = []
         seen: set[str] = set()
-        for raw_id in cast(list[object], ids):
+        for raw_id in raw_ids:
             import_id = self._valid_id(raw_id)
             if import_id is None:
                 if isinstance(raw_id, str):
@@ -414,10 +430,11 @@ class MemoryImportStore:
                 failed.append(import_id)
                 continue
             try:
+                archive_root = self._managed_dir(self.archive_dir)
                 resolved = directory.resolve(strict=True)
-                resolved.relative_to(self.archive_dir.resolve(strict=True))
+                resolved.relative_to(archive_root.resolve(strict=True))
                 shutil.rmtree(directory)
-            except (OSError, ValueError):
+            except (MemoryImportError, OSError, ValueError):
                 failed.append(import_id)
                 continue
             deleted.append(import_id)

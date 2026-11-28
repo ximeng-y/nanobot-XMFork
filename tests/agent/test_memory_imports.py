@@ -1,4 +1,5 @@
 import base64
+import shutil
 
 import pytest
 
@@ -69,6 +70,46 @@ def test_import_rejects_symlinked_memory_root(tmp_path, create_symlink):
 
     assert error.value.status == 500
     assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("linked_dir", ["root", "archive"])
+def test_import_store_rejects_redirected_managed_directory(
+    tmp_path, create_symlink, linked_dir,
+):
+    store_a = MemoryImportStore(tmp_path / "workspace-a")
+    store_b = MemoryImportStore(tmp_path / "workspace-b")
+    local = store_a.import_bytes("local.md", encoded(b"# Local\n"))
+    foreign = store_b.import_bytes("foreign.md", encoded(b"# Foreign\n"))
+    store_b.archive(foreign["id"])
+    foreign_content = store_b.read_import(foreign["id"])[1]
+
+    if linked_dir == "root":
+        shutil.rmtree(store_a.root)
+        create_symlink(store_a.root, store_b.root, target_is_directory=True)
+    else:
+        shutil.rmtree(store_a.archive_dir)
+        create_symlink(
+            store_a.archive_dir,
+            store_b.archive_dir,
+            target_is_directory=True,
+        )
+
+    if linked_dir == "root":
+        assert store_a.list_entries() == []
+        with pytest.raises(MemoryImportError):
+            store_a.import_bytes("blocked.md", encoded(b"# Blocked\n"))
+    else:
+        assert [entry["id"] for entry in store_a.list_entries()] == [local["id"]]
+    with pytest.raises(MemoryImportError):
+        store_a.archive(local["id"])
+    with pytest.raises(MemoryImportError) as error:
+        store_a.read_import(foreign["id"])
+    assert error.value.status == 404
+    assert store_a.delete_archived([foreign["id"]]) == {
+        "deleted": [],
+        "failed": [foreign["id"]],
+    }
+    assert store_b.read_import(foreign["id"])[1] == foreign_content
 
 
 def test_archive_delete_only_removes_archived_entries(tmp_path):

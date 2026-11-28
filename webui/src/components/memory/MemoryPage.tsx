@@ -296,6 +296,7 @@ export function MemoryPage({
   const pageVisible = usePageVisibility();
   const mountedRef = useRef(true);
   const refreshingRef = useRef(false);
+  const selectedPathRef = useRef<string | null>(null);
   const documentRequestRef = useRef(0);
   const previewRequestRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -327,19 +328,30 @@ export function MemoryPage({
   const loadMemory = useCallback(async ({
     initial = false,
     silent = false,
-  }: { initial?: boolean; silent?: boolean } = {}) => {
-    if (refreshingRef.current) return;
+  }: { initial?: boolean; silent?: boolean } = {}): Promise<MemoryPayload | null> => {
+    if (refreshingRef.current) return null;
     refreshingRef.current = true;
     if (initial) setLoading(true);
     if (!silent) setRefreshing(true);
     try {
       const next = await fetchMemory(getToken());
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) return null;
       setPayload(next);
       setLoadError(null);
+      const currentPath = selectedPathRef.current;
+      if (currentPath && !next.documents.some((document) => document.path === currentPath)) {
+        documentRequestRef.current += 1;
+        selectedPathRef.current = null;
+        setSelectedPath(null);
+        setDocumentState(null);
+        setMobileReading(false);
+        setLibraryNotice(null);
+      }
+      return next;
     } catch (reason) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) return null;
       setLoadError(errorMessage(reason));
+      return null;
     } finally {
       refreshingRef.current = false;
       if (mountedRef.current) {
@@ -404,22 +416,7 @@ export function MemoryPage({
     return () => window.clearInterval(timer);
   }, [loadMemory, pageVisible, pendingEntries.length]);
 
-  const openDocument = useCallback((rawPath: string) => {
-    const path = normalizeMemoryPath(rawPath);
-    if (!path || !documentPaths.has(path)) {
-      setLibraryNotice(t("memory.library.linkUnavailable"));
-      return;
-    }
-    setLibraryNotice(null);
-    setSelectedPath(path);
-    setMobileReading(true);
-    setExpandedWiki((current) => {
-      const next = new Set(current);
-      wikiAncestorPaths(path).forEach((ancestor) => next.add(ancestor));
-      return next;
-    });
-    if (documentState?.status === "ready" && documentState.path === path) return;
-
+  const requestDocument = useCallback((path: string) => {
     const request = ++documentRequestRef.current;
     setDocumentState({ status: "loading", path });
     void fetchMemoryDocument(getToken(), path)
@@ -435,7 +432,35 @@ export function MemoryPage({
           message: errorMessage(reason),
         });
       });
-  }, [documentPaths, documentState, getToken, t]);
+  }, [getToken]);
+
+  const openDocument = useCallback((rawPath: string) => {
+    const path = normalizeMemoryPath(rawPath);
+    if (!path || !documentPaths.has(path)) {
+      setLibraryNotice(t("memory.library.linkUnavailable"));
+      return;
+    }
+    setLibraryNotice(null);
+    selectedPathRef.current = path;
+    setSelectedPath(path);
+    setMobileReading(true);
+    setExpandedWiki((current) => {
+      const next = new Set(current);
+      wikiAncestorPaths(path).forEach((ancestor) => next.add(ancestor));
+      return next;
+    });
+    requestDocument(path);
+  }, [documentPaths, requestDocument, t]);
+
+  const refreshMemory = useCallback(async () => {
+    const next = await loadMemory();
+    if (!next) return;
+    const path = selectedPathRef.current;
+    if (path && next.documents.some((document) => document.path === path)) {
+      setLibraryNotice(null);
+      requestDocument(path);
+    }
+  }, [loadMemory, requestDocument]);
 
   const toggleWikiFolder = (path: string) => {
     setExpandedWiki((current) => {
@@ -942,7 +967,7 @@ export function MemoryPage({
                 aria-label={t("memory.refresh")}
                 title={t("memory.refresh")}
                 disabled={loading || refreshing}
-                onClick={() => void loadMemory()}
+                onClick={() => void refreshMemory()}
               >
                 <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} aria-hidden />
               </Button>

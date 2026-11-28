@@ -785,8 +785,8 @@ describe("App layout", () => {
     await within(footer).findByRole("button", { name: "Switch host" });
     const buttons = within(footer).getAllByRole("button");
     expect(buttons.map((button) => button.getAttribute("aria-label")))
-      .toEqual(["Apps", "Automations", "Settings", "Switch host"]);
-    expect(buttons.slice(0, 3).map((button) => button.textContent)).toEqual(["Apps", "Automations", "Settings"]);
+      .toEqual(["Apps", "Automations", "Memory", "Settings", "Switch host"]);
+    expect(buttons.slice(0, 4).map((button) => button.textContent)).toEqual(["Apps", "Automations", "Memory", "Settings"]);
     fireEvent.click(within(footer).getByRole("button", { name: "Apps" }));
     await act(async () => { await import("@/components/settings/SettingsView"); });
     const sections = await screen.findByRole("group", { name: "Apps" });

@@ -74,9 +74,9 @@ export function isWikiMemoryPath(path: string): boolean {
 }
 
 export function normalizeMemoryPath(value: string): string | null {
-  const withoutQuery = value.replace(/\\/g, "/").split(/[?#]/, 1)[0] ?? "";
+  const normalized = value.replace(/\\/g, "/");
   const parts: string[] = [];
-  for (const segment of withoutQuery.split("/")) {
+  for (const segment of normalized.split("/")) {
     if (!segment || segment === ".") continue;
     if (segment === "..") {
       if (!parts.length) return null;

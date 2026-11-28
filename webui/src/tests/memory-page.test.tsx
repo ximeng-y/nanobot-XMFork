@@ -53,6 +53,24 @@ vi.mock("@/components/MarkdownText", () => ({
           Setup
         </button>
       ) : null}
+      {children.includes("[Topic]") ? (
+        <button
+          type="button"
+          aria-label="Encoded topic link"
+          onClick={() => onOpenFilePreview?.("memory/wiki/topic#2.md")}
+        >
+          Topic
+        </button>
+      ) : null}
+      {children.includes("[Missing]") ? (
+        <button
+          type="button"
+          aria-label="Missing topic link"
+          onClick={() => onOpenFilePreview?.("memory/wiki/missing.md")}
+        >
+          Missing
+        </button>
+      ) : null}
     </div>
   ),
 }));
@@ -90,6 +108,8 @@ const memoryPayload: MemoryPayload = {
     { path: "memory/MEMORY.md" },
     { path: "memory/wiki/index.md" },
     { path: "memory/wiki/Guides/Setup.md" },
+    { path: "memory/wiki/topic#2.md" },
+    { path: "memory/wiki/topic?2.md" },
   ],
   imports: [pendingEntry, ...archivedEntries],
   max_import_bytes: 262_144,
@@ -97,9 +117,11 @@ const memoryPayload: MemoryPayload = {
 
 const documentContents: Record<string, string> = {
   "SOUL.md": "# Agent soul\n",
-  "memory/MEMORY.md": "# Memory root\n\n[Setup](wiki/Guides/Setup.md)\n",
+  "memory/MEMORY.md": "# Memory root\n\n[Setup](wiki/Guides/Setup.md)\n[Topic](wiki/topic%232.md)\n[Missing](wiki/missing.md)\n",
   "memory/wiki/index.md": "# Wiki home\n",
   "memory/wiki/Guides/Setup.md": "# Setup guide\n",
+  "memory/wiki/topic#2.md": "# Topic 2\n",
+  "memory/wiki/topic?2.md": "# Topic query\n",
 };
 
 function renderMemoryPage() {
@@ -174,6 +196,97 @@ describe("memory page", () => {
     });
     expect(screen.getByRole("button", { name: "memory/wiki/Guides" }))
       .toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("preserves URI delimiters in listed paths and encoded document links", async () => {
+    const user = userEvent.setup();
+    renderMemoryPage();
+
+    await user.click(await screen.findByRole("button", { name: "memory/wiki/topic#2.md" }));
+    await waitFor(() => {
+      expect(apiMocks.fetchMemoryDocument).toHaveBeenLastCalledWith(
+        "test-token",
+        "memory/wiki/topic#2.md",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "memory/wiki/topic?2.md" }));
+    await waitFor(() => {
+      expect(apiMocks.fetchMemoryDocument).toHaveBeenLastCalledWith(
+        "test-token",
+        "memory/wiki/topic?2.md",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "memory/MEMORY.md" }));
+    await user.click(await screen.findByRole("button", { name: "Missing topic link" }));
+    expect(await screen.findByText("That link is not part of the memory library.")).toBeVisible();
+    expect(apiMocks.fetchMemoryDocument).not.toHaveBeenCalledWith(
+      "test-token",
+      "memory/wiki/missing.md",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Encoded topic link" }));
+    await waitFor(() => {
+      expect(apiMocks.fetchMemoryDocument).toHaveBeenLastCalledWith(
+        "test-token",
+        "memory/wiki/topic#2.md",
+      );
+      expect(screen.getByTestId("memory-markdown")).toHaveTextContent("Topic 2");
+    });
+  });
+
+  it("refreshes the selected document without leaving the page and reloads on reselection", async () => {
+    const user = userEvent.setup();
+    let soulContent = "first soul";
+    apiMocks.fetchMemoryDocument.mockImplementation(
+      async (_token: string, path: string) => ({
+        path,
+        content: path === "SOUL.md" ? soulContent : documentContents[path] ?? "",
+      }),
+    );
+    renderMemoryPage();
+
+    const soul = await screen.findByRole("button", { name: "SOUL.md" });
+    await user.click(soul);
+    expect(await screen.findByText("first soul")).toBeVisible();
+
+    soulContent = "second soul";
+    await user.click(soul);
+    expect(await screen.findByText("second soul")).toBeVisible();
+    expect(apiMocks.fetchMemoryDocument).toHaveBeenCalledTimes(2);
+
+    soulContent = "refreshed soul";
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("refreshed soul")).toBeVisible();
+    expect(apiMocks.fetchMemory).toHaveBeenCalledTimes(2);
+    expect(apiMocks.fetchMemoryDocument).toHaveBeenCalledTimes(3);
+    expect(apiMocks.fetchMemoryDocument).toHaveBeenLastCalledWith("test-token", "SOUL.md");
+  });
+
+  it("drops the selected document when refresh removes it from the list", async () => {
+    const user = userEvent.setup();
+    const withoutSoul: MemoryPayload = {
+      ...memoryPayload,
+      documents: memoryPayload.documents.filter((document) => document.path !== "SOUL.md"),
+    };
+    apiMocks.fetchMemory
+      .mockResolvedValueOnce(memoryPayload)
+      .mockResolvedValueOnce(withoutSoul);
+    renderMemoryPage();
+
+    await user.click(await screen.findByRole("button", { name: "SOUL.md" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("memory-markdown")).toHaveTextContent("Agent soul");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(apiMocks.fetchMemory).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByTestId("memory-markdown")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Choose a file from the list to read it.")).toBeVisible();
+    expect(apiMocks.fetchMemoryDocument).toHaveBeenCalledTimes(1);
   });
 
   it("uploads file bytes as standard Base64 and reports the result", async () => {

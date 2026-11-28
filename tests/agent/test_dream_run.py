@@ -417,6 +417,37 @@ async def test_history_cursor_and_imports_share_one_dream_run_without_advancing_
 
 
 @pytest.mark.asyncio
+async def test_history_context_overflow_does_not_block_imports_or_advance_cursor(tmp_path):
+    store = MemoryStore(tmp_path)
+    store.append_history("Pending chat summary")
+    imported = import_markdown(store, "source.md", "# Source\nUsable external material")
+    calls = []
+
+    async def process(prompt, **kwargs):
+        if "## Conversation History" in prompt:
+            calls.append("history")
+            raise ContextWindowExceededError(
+                session_key=kwargs["session_key"],
+                estimated_tokens=20_000,
+                input_budget=8_000,
+                source="test",
+            )
+        calls.append("import")
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    entry = store.imports.list_entries()[0]
+    assert calls == ["history", "import"]
+    assert result.error
+    assert result.had_input is True
+    assert store.get_last_dream_cursor() == 0
+    assert entry["id"] == imported["id"]
+    assert entry["status"] == "archived"
+
+
+@pytest.mark.asyncio
 async def test_import_that_does_not_fit_model_context_stays_pending(tmp_path):
     store = MemoryStore(tmp_path)
     imported = import_markdown(store, "large.md", "# Large\nFull source")

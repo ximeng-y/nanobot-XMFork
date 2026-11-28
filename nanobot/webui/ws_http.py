@@ -500,9 +500,13 @@ class GatewayHTTPHandler:
                         return MutationResult.failure(exc.status, exc.message)
                     return MutationResult.success({"entry": entry})
                 if action == "memory.archive.delete":
-                    ids = payload.get("ids")
-                    if not isinstance(ids, list) or any(not isinstance(item, str) for item in ids):
+                    requested_ids = payload.get("ids")
+                    if not isinstance(requested_ids, list):
                         return MutationResult.failure(400, "Invalid imported file IDs")
+                    raw_ids = cast(list[object], requested_ids)
+                    if any(not isinstance(item, str) for item in raw_ids):
+                        return MutationResult.failure(400, "Invalid imported file IDs")
+                    ids = [item for item in raw_ids if isinstance(item, str)]
                     try:
                         deleted = await asyncio.to_thread(self.memory.delete_archived, ids)
                     except MemoryAPIError as exc:

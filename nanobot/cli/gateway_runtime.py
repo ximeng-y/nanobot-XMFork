@@ -993,8 +993,11 @@ def _run_claimed_gateway(
                     name="nanobot-dock",
                 ))
             if update_profile is not None:
+                from nanobot.fork_update import GatewayHandoff, bind_gateway
                 from nanobot.update_stop import watch_gateway_stop
 
+                if update_startup is None:
+                    bind_gateway(GatewayHandoff(update_profile, shutdown_event.set, agent.maintenance, startup_gate))
                 tasks.append(asyncio.create_task(
                     watch_gateway_stop(update_profile, agent.maintenance, shutdown_event, startup_gate),
                     name="nanobot-update-stop",

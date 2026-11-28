@@ -17,6 +17,7 @@ import httpx
 from pydantic import ValidationError
 from pydantic.alias_generators import to_snake
 
+from nanobot import fork_update
 from nanobot.agent.tools.sandbox_check import check_sandbox, sandbox_settings_status
 from nanobot.build_info import COMMIT
 from nanobot.channels._setup import channel_setup_spec
@@ -29,8 +30,10 @@ from nanobot.channels.contracts import (
 from nanobot.config.schema import Config
 from nanobot.llm_usage import llm_usage_payload
 from nanobot.optional_features import OptionalFeatureError, with_channel_runtime_status
-from nanobot.runtime_admission import RuntimeAdmission
+from nanobot.repository import ForkTarget
+from nanobot.runtime_admission import RuntimeAdmission, RuntimeBusyError
 from nanobot.security.workspace_access import workspace_sandbox_status
+from nanobot.update import ForkPreflightError
 from nanobot.update_channel import UpdateChannelRequest
 from nanobot.update_guidance import installation_method
 from nanobot.update_jobs import UpdateJobNotFoundError, read_update_job
@@ -584,6 +587,30 @@ class SystemSettingsHandler:
             )
         if action == "version-check":
             return await self._version_check(request, operations)
+        if action == "update-fork-status":
+            return SettingsRouteResult.success(fork_update.status())
+        if action == "update-fork":
+            if not self.allow_feature_package_install(request):
+                return SettingsRouteResult.failure(403, "Updating requires package-install permission.")
+            fields = request.payload or {}
+            try:
+                if set(fields) != {"tag", "commit", "revision"} or type(fields["revision"]) is not int:
+                    raise ValueError
+                target = ForkTarget(fields["tag"], fields["commit"])
+            except (TypeError, ValueError):
+                return SettingsRouteResult.failure(400, "Invalid Fork update target.")
+            if not (gateway := fork_update.active_gateway):
+                return SettingsRouteResult.failure(409, "The gateway has no source update launcher.")
+            try:
+                await gateway.submit(target, fields["revision"])
+            except RuntimeBusyError:
+                return SettingsRouteResult.failure(409, "Finish running tasks before updating.")
+            except ForkPreflightError as exc:
+                return SettingsRouteResult.failure(409, str(exc))
+            except (OSError, ValueError, RuntimeError, KeyError) as exc:
+                self.logger.warning("Fork update refused ({})", type(exc).__name__)
+                return SettingsRouteResult.failure(409, "Could not verify the Fork update. Check the tag, working tree, and running gateways.")
+            return SettingsRouteResult.success({"version": target.version})
         if action == "update-channel":
             if not self.allow_feature_package_install(request):
                 return SettingsRouteResult.failure(403, "Changing update channels requires package-install permission.")
@@ -1270,6 +1297,11 @@ class SystemSettingsHandler:
                 method = installation_method(await asyncio.to_thread(inspect_update_installation))
             except (RuntimeError, ValueError, OSError, subprocess.SubprocessError):
                 method = None  # Unknown owner must not imply one-click eligibility.
+            if update_info.get("forkTarget") and not (
+                self.allow_feature_package_install(request)
+                and fork_update.active_gateway and fork_update.active_gateway.available()
+            ):
+                update_info = {key: value for key, value in update_info.items() if key != "forkTarget"}
             return SettingsRouteResult.success({
                 **update_info, "can_change_channel": self.allow_feature_package_install(request),
                 "installation_method": method,

@@ -49,6 +49,73 @@ def test_source_update_fast_forwards_current_branch(checkout):
     assert git(root, "branch", "--show-current") == "main"
 
 
+@pytest.fixture
+def fork_tags(checkout, monkeypatch, tmp_path):
+    from nanobot.repository import ForkTarget
+
+    root, remote = checkout
+    monkeypatch.setattr(update, "fork_source_root", lambda: root)
+    monkeypatch.setattr(update, "_SOURCE_URL", str(remote))
+    monkeypatch.setattr(update, "_installed_version", lambda: Version("0.4.2+xm.1"))
+    monkeypatch.setattr(update, "__version__", "0.4.2+xm.1")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "account"))
+    targets = []
+    for number in (2, 3):
+        tag = f"v0.4.2-xm.{number}"
+        (remote / "pyproject.toml").write_text(f'[project]\nversion = "0.4.2+xm.{number}"\n')
+        git(remote, "add", "pyproject.toml")
+        git(remote, "commit", "-m", tag)
+        git(remote, "tag", "-a", tag, "-m", tag)
+        targets.append(ForkTarget(tag, git(remote, "rev-parse", "HEAD")))
+    return root, remote, targets
+
+
+@pytest.mark.parametrize("fail_build", [False, True])
+def test_fork_update_installs_the_displayed_tag_or_restores_the_original_checkout(fork_tags, monkeypatch, fail_build):
+    root, _, (displayed, newer) = fork_tags
+    before = git(root, "rev-parse", "HEAD")
+    update.prepare_fork_target(displayed)
+    assert git(root, "rev-parse", "HEAD") == before
+    built, verified = [], []
+
+    def refresh(checkout, _output):
+        built.append(git(checkout, "rev-parse", "HEAD"))
+        if fail_build and built[-1] == displayed.commit:
+            raise update.UpdateError("build failed")
+
+    monkeypatch.setattr(update, "_refresh_source", refresh)
+    monkeypatch.setattr(update, "_verify_installation", lambda v, _: verified.append(v))
+    if fail_build:
+        with pytest.raises(update.UpdateError, match="build failed"):
+            update.install_fork_target(displayed)
+        assert git(root, "branch", "--show-current") == "main"
+        assert built == [displayed.commit, before]
+        assert verified == ["0.4.2+xm.1"]
+    else:
+        update.install_fork_target(displayed)
+        assert git(root, "rev-parse", "HEAD") == displayed.commit != newer.commit
+        assert built == [displayed.commit]
+        assert verified == [displayed.version]
+    assert not update.incomplete_update()
+
+
+def test_moved_fork_tag_is_refused_before_switching(fork_tags):
+    root, remote, (displayed, newer) = fork_tags
+    git(remote, "tag", "-f", displayed.tag, newer.commit)
+    with pytest.raises(update.UpdateError, match="tag changed"):
+        update.prepare_fork_target(displayed)
+    assert git(root, "branch", "--show-current") == "main"
+
+
+def test_fork_install_preserves_work_added_since_the_notice(fork_tags):
+    root, _, (target, _) = fork_tags
+    update.prepare_fork_target(target)
+    (root / "file").write_text("local work")
+    with pytest.raises(update.UpdateError, match="local changes"):
+        update.install_fork_target(target)
+    assert (root / "file").read_text() == "local work"
+
+
 def test_release_install_gets_a_managed_source_checkout(checkout, tmp_path, monkeypatch):
     _, upstream = checkout
     monkeypatch.setattr(update, "source_checkout", lambda: None)

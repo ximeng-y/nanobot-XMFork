@@ -1,10 +1,11 @@
 import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
-import { checkVersion, changeUpdateChannel, type ReleaseStatus, type UpdateChannel, type UpdateMethod, type WebUIMutationTransport } from "@/lib/api";
+import { useForkUpdate } from "@/hooks/useForkUpdate";
+import { checkVersion, changeUpdateChannel, type ForkUpdateTarget, type ReleaseStatus, type UpdateChannel, type UpdateMethod, type WebUIMutationTransport } from "@/lib/api";
 
 export type VersionResult =
   | { type: "up-to-date" }
-  | { type: "update"; latestVersion: string; pypiUrl?: string; releaseUrl?: string }
+  | { type: "update"; latestVersion: string; pypiUrl?: string; releaseUrl?: string; forkTarget?: ForkUpdateTarget }
   | { type: "release-status"; state: ReleaseStatus["state"] }
   | { type: "error"; message: string }
   | null;
@@ -23,7 +24,7 @@ interface VersionCheckState {
   changeChannel: (channel: UpdateChannel) => Promise<void>;
 }
 
-const VersionCheckContext = createContext<VersionCheckState | null>(null);
+const VersionCheckContext = createContext<(VersionCheckState & { forkUpdate: ReturnType<typeof useForkUpdate> }) | null>(null);
 
 // Per-connection store: old responses can only update their original store.
 // Changing credentials must not remount the application or discard chat drafts.
@@ -50,7 +51,7 @@ function createVersionCheck(token: string, channels: boolean, client?: WebUIMuta
         update({ installationMethod: method && ["managed", "uv", "pipx", "pip", "source", "container", "system"].includes(method) ? method : null });
         if (channels && response.releaseStatus) update({ releaseStatus: response.releaseStatus, canChangeChannel: response.can_change_channel === true });
         update({ result: response.updateAvailable
-          ? { type: "update", ...response.updateAvailable }
+          ? { type: "update", ...response.updateAvailable, forkTarget: channels ? response.forkTarget : undefined }
           : response.releaseStatus && response.releaseStatus.state !== "current"
             ? { type: "release-status", state: response.releaseStatus.state }
             : { type: "up-to-date" } });
@@ -104,8 +105,9 @@ export function VersionCheckProvider({ token, channels = false, client, children
 }) {
   const store = useMemo(() => createVersionCheck(token, channels, client), [token, channels, client]);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const forkUpdate = useForkUpdate(channels ? client : undefined, token);
 
-  return <VersionCheckContext.Provider value={{ ...snapshot, check: store.check, dismiss: store.dismiss, changeChannel: store.changeChannel }}>
+  return <VersionCheckContext.Provider value={{ ...snapshot, forkUpdate, check: store.check, dismiss: store.dismiss, changeChannel: store.changeChannel }}>
     {children}
   </VersionCheckContext.Provider>;
 }

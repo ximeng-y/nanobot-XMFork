@@ -485,6 +485,10 @@ class GatewayHTTPHandler:
         headers = getattr(getattr(connection, "request", None), "headers", None) or Headers()
         params = MutationParams(payload)
         try:
+            if action == "settings.nanobot.update.fork":
+                # This operation must take the idle gate itself, not count its own request as work.
+                self.bus.admission.check()
+                return await self.settings_routes.dispatch_mutation(connection, headers, action, params)
             # The operation outlives its socket; hold admission until the write ends.
             with self.bus.admission.activity():
                 if action.startswith("settings."):

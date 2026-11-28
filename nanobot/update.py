@@ -26,7 +26,7 @@ from nanobot.installation_lock import (
     installation_id,
     pending_update_path,
 )
-from nanobot.repository import SOURCE_URL
+from nanobot.repository import SOURCE_URL, ForkTarget
 
 _SOURCE_URL = SOURCE_URL
 
@@ -43,6 +43,10 @@ class UpdateResult(TypedDict):
     version: str
     source: str
     requires_restart: bool
+
+
+class ForkPreflightError(UpdateError):
+    """An actionable preflight message that is safe to return to the browser."""
 
 
 def _run(
@@ -249,6 +253,86 @@ def _installed_version() -> Version:
     return Version(_checked([sys.executable, "-I", "-c", probe]) or __version__)
 
 
+def fork_source_root() -> Path | None:
+    root = source_checkout()
+    if (root and (root / ".git").exists() and _is_editable()
+            and not update_blocked_reason(dev=True) and shutil.which("git")):
+        return root
+    return None
+
+
+def _check_fork_checkout(root: Path, target: ForkTarget) -> None:
+    if _checked(["git", "status", "--porcelain"], cwd=root):
+        raise ForkPreflightError("Commit or stash local changes before updating.")
+    if _run(["git", "merge-base", "--is-ancestor", "HEAD", target.commit], cwd=root).returncode:
+        raise ForkPreflightError("The displayed release does not include this checkout's commits.")
+    project = tomllib.loads(_checked(["git", "show", f"{target.commit}:pyproject.toml"], cwd=root))
+    if project["project"]["version"] != target.version:
+        raise ForkPreflightError("The tag and its Python package version do not match.")
+
+
+def prepare_fork_target(target: ForkTarget) -> None:
+    """Fetch only the displayed tag, without switching branches or trusting a local tag."""
+    root = fork_source_root()
+    if root is None:
+        raise ForkPreflightError("This installation is not an editable Fork checkout.")
+    if incomplete_update():
+        raise ForkPreflightError("Finish the pending installation before starting another update.")
+    if Version(target.version) <= max(Version(__version__), _installed_version()):
+        raise ForkPreflightError("The selected release is not newer than this installation.")
+    remote_ref = f"refs/tags/{target.tag}"
+    result = _run(["git", "fetch", "--no-tags", "--", _SOURCE_URL, remote_ref], cwd=root)
+    if result.returncode:
+        raise ForkPreflightError("Could not fetch the displayed tag from the Fork.")
+    if _checked(["git", "rev-parse", "FETCH_HEAD^{commit}"], cwd=root) != target.commit:
+        raise ForkPreflightError("The Fork tag changed. Check for updates again.")
+    _check_fork_checkout(root, target)
+
+
+def _refresh_source(root: Path, output: Callable[[str], None], *, bun: str | None = None) -> None:
+    from nanobot.webui.build import build_webui_bundle
+
+    bun = bun or ensure_bun(output=output)
+    output("Preparing TUI dependencies…")
+    with bun_environment(bun) as env:
+        result = _run([bun, "install", "--frozen-lockfile"], cwd=root / "tui", env=env)
+    if result.returncode:
+        raise UpdateError(f"TUI dependencies failed: {(result.stderr or result.stdout)[-4000:]}")
+    output("Building WebUI…")
+    build_webui_bundle(source_dir=root / "webui", dist_dir=root / "nanobot/web/dist", runner=bun, output=output)
+    output("Synchronizing Python dependencies…")
+    _install(["--editable", str(root)])
+
+
+def install_fork_target(target: ForkTarget) -> None:
+    """Called by the original launcher after shutdown, under the exclusive installation lease."""
+    root = fork_source_root()
+    if root is None or incomplete_update():
+        raise UpdateError("This installation is unavailable or already has an unfinished update.")
+    _check_fork_checkout(root, target)
+    old = _checked(["git", "rev-parse", "HEAD"], cwd=root)
+    branch = _checked(["git", "branch", "--show-current"], cwd=root)
+    previous_version = str(_installed_version())
+    if Version(target.version) <= Version(previous_version):
+        raise UpdateError("The selected release is no longer newer than this installation.")
+    _mark_installing()
+    try:
+        _checked(["git", "switch", "--no-overwrite-ignore", "--detach", target.commit], cwd=root)
+    except Exception:
+        pending_update_path().unlink()
+        raise
+    try:
+        _refresh_source(root, print)
+        _verify_installation(target.version, str(root))
+    except Exception:
+        _checked(["git", "switch", "--no-overwrite-ignore", *([branch] if branch else ["--detach", old])], cwd=root)
+        _refresh_source(root, print)
+        _verify_installation(previous_version, str(root))
+        pending_update_path().unlink()
+        raise
+    pending_update_path().unlink()
+
+
 def update_installation(
     *, dev: bool = False, allow_downgrade: bool = False, output: Callable[[str], None] = print,
 ) -> UpdateResult:
@@ -269,20 +353,7 @@ def update_installation(
             if dev:
                 bun = ensure_bun(output=output)
                 root = _prepare_source(output, before_change=_mark_installing)
-                output("Preparing TUI dependencies…")
-                with bun_environment(bun) as env:
-                    result = _run([bun, "install", "--frozen-lockfile"], cwd=root / "tui", env=env)
-                if result.returncode:
-                    raise UpdateError(f"TUI dependencies failed: {(result.stderr or result.stdout)[-4000:]}")
-                output("Building WebUI…")
-                from nanobot.webui.build import build_webui_bundle
-
-                build_webui_bundle(
-                    source_dir=root / "webui", dist_dir=root / "nanobot/web/dist",
-                    runner=bun, output=output,
-                )
-                output("Synchronizing Python dependencies…")
-                _install(["--editable", str(root)])
+                _refresh_source(root, output, bun=bun)
                 expected = str(tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])
                 source = str(root)
             else:

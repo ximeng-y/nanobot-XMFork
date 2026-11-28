@@ -1,8 +1,10 @@
 # Updating nanobot-XMFork
 
-nanobot-XMFork checks this Fork's GitHub tags for newer versions. The check only reports the tag; it does not download or install anything.
+nanobot-XMFork checks this Fork's GitHub tags for newer versions. Checking does not install anything. In **Settings → About**, an editable source installation with its own Python environment and Git can offer **Update & restart**. That button fetches the exact displayed Fork tag, checks its commit and package version, and asks the original launcher to stop the idle gateway, install the update, and restart. The notice does not advance to a newer tag if one is published while the page is open. The page reloads after the reconnected gateway reports the expected version.
 
-This Fork does not publish PyPI packages, signed release installers, or prebuilt Docker images. The WebUI **Update & restart** action, `nanobot update`, `uv tool upgrade nanobot-ai`, `pipx upgrade nanobot-ai`, and `pip install --upgrade nanobot-ai` target upstream releases and cannot install the version shown in the update notice. `nanobot update --dev` only fast-forwards a branch to its configured upstream; it does not select the displayed tag and fails from a detached checkout.
+This Fork does not publish PyPI packages, signed release installers, or prebuilt Docker images. `nanobot update`, `uv tool upgrade nanobot-ai`, `pipx upgrade nanobot-ai`, and `pip install --upgrade nanobot-ai` target upstream releases and cannot install the version shown in the Fork update notice. `nanobot update --dev` only fast-forwards a branch to its configured upstream; it does not select the displayed tag and fails from a detached checkout.
+
+The one-click source update works with `nanobot webui` (including the Windows launcher), or a gateway started directly with `nanobot gateway`. Finish running tasks, exit any native TUI using the same Python environment, and commit or stash local changes first. The updater leaves the checkout detached at the selected commit and does not move your branch. If rebuilding the WebUI or refreshing the editable package fails, it tries to restore the previous checkout and installation before relaunching. Remote WebUI users need the gateway's existing remote package-install permission. For containers and installations managed by another package manager, use the deployment-specific instructions below.
 
 ## Before You Update
 

@@ -13,7 +13,7 @@ import hashlib
 import os
 import sys
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO
@@ -144,3 +144,22 @@ def installation_access(*, updating: bool = False, allow_incomplete: bool = Fals
             )
             raise InstallationBusyError(message) from exc
         raise
+
+
+@contextmanager
+def tui_installation_access(*, updating: bool = False,
+                            environment: str | Path | None = None) -> Generator[None]:
+    """区分占用同一 Python 环境的原生 TUI，不替代 runtime.lock。"""
+    with ExitStack() as leases:
+        try:
+            leases.enter_context(file_access(
+                installation_state_dir(environment) / "tui.lock", exclusive=updating,
+            ))
+        except BlockingIOError as exc:
+            message = (
+                "Exit the native TUI sharing this Python installation before updating."
+                if updating else
+                "This installation is preparing to update. Reopen the native TUI after the update."
+            )
+            raise InstallationBusyError(message) from exc
+        yield

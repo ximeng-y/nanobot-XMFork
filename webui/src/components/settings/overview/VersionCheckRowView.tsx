@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { Check, ExternalLink, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { useForkUpdate } from "@/hooks/useForkUpdate";
 
 import { Button } from "@/components/ui/button";
 import { SettingsGroup, SettingsRow } from "@/components/settings/shared/SettingsControls";
@@ -22,12 +23,13 @@ export type VersionCheckState = VersionResult;
 
 export function VersionCheckRowView({
   currentVersion, currentCommit, checking, result, onCheck,
-  onRequestUpdate, hasPendingUpdate, installationMethod,
+  onRequestUpdate, hasPendingUpdate, installationMethod, forkUpdate,
   releaseStatus, canChangeChannel, changingChannel, channelError, onChangeChannel,
 }: VersionInfoProps & {
   checking: boolean;
   result: VersionCheckState;
   onCheck: () => void;
+  forkUpdate?: ReturnType<typeof useForkUpdate>;
   releaseStatus?: ReleaseStatus | null;
   canChangeChannel?: boolean;
   changingChannel?: boolean;
@@ -38,6 +40,7 @@ export function VersionCheckRowView({
   const previewHelp = useId();
   const previewToggle = useId();
   const available = result?.type === "update" ? result : null;
+  const forkTarget = available?.forkTarget;
   const actionClass = "h-auto min-h-9 max-w-full whitespace-normal break-words text-start";
   return (
     <SettingsGroup>
@@ -63,10 +66,11 @@ export function VersionCheckRowView({
         </div>
         {!checking && available && releaseStatus?.state === "withdrawn" &&
           <p role="alert" className="mt-1 text-[13px] font-normal leading-5 text-destructive">{t("updates.channel.withdrawn")}</p>}
-        {available && !checking && !onRequestUpdate &&
+        {available && !checking && !onRequestUpdate && !available.forkTarget &&
           <p className="mt-1 text-[13px] font-normal leading-5 text-muted-foreground">{t("settings.about.updateInstructions")}</p>}
       </>}>
         <div className="settings-version-actions flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          {forkUpdate?.error && <span role="alert" className="text-sm text-destructive">{forkUpdate.error}</span>}
           {(checking || (result && !available)) && <span role="status" aria-atomic="true" className={`min-w-0 text-[13px] leading-5 [overflow-wrap:anywhere] ${result?.type === "error" && !checking ? "text-destructive" : "text-muted-foreground"}`}>
             {checking ? <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />
@@ -76,12 +80,15 @@ export function VersionCheckRowView({
             </span> : result?.type === "release-status" ? t(`updates.channel.${result.state}`)
               : result?.type === "error" ? result.message : null}
           </span>}
-          {hasPendingUpdate && onRequestUpdate ? (
+          {forkUpdate?.busy ? <Button size="sm" variant="outline" disabled>{t("updates.reconnecting")}</Button> : hasPendingUpdate && onRequestUpdate ? (
             <Button size="sm" variant="outline" className={actionClass} onClick={onRequestUpdate}>
               {t("settings.about.viewUpdateDetails")}
             </Button>
           ) : checking ? null : available ? <>
-            {onRequestUpdate ? <Button size="sm" variant="outline" className={actionClass} onClick={onRequestUpdate} disabled={changingChannel}>
+            {forkTarget && releaseStatus && forkUpdate ? <Button size="sm" variant="outline" className={actionClass}
+              disabled={changingChannel} onClick={() => void forkUpdate.apply(forkTarget, available.latestVersion, releaseStatus.revision)}>
+              {t("updates.apply")}</Button>
+              : onRequestUpdate ? <Button size="sm" variant="outline" className={actionClass} onClick={onRequestUpdate} disabled={changingChannel}>
               {installationMethod && installationMethod !== "managed"
                 ? t("updates.guide.entry", { method: t(`updates.guide.methods.${installationMethod}`) })
                 : t("settings.about.updateNow")}

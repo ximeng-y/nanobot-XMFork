@@ -25,6 +25,7 @@ from nanobot.cli.webui_support import (
 )
 from nanobot.config.paths import get_data_dir
 from nanobot.config.schema import Config
+from nanobot.installation_lock import tui_installation_access
 from nanobot.webui.session_identity import is_webui_session_key, webui_chat_id
 
 if TYPE_CHECKING:
@@ -70,6 +71,7 @@ class _GatewayHandle:
     lease: GatewayClientLease | None = None
 
 
+@tui_installation_access()
 def launch_tui(
     config: Config,
     *,

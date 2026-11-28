@@ -82,7 +82,7 @@ function isSlashCommandLifecycle(value: unknown): value is SlashCommandLifecycle
 }
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, readonly responseUnknown = false) {
     super(message);
     this.status = status;
     this.name = "ApiError";
@@ -200,7 +200,9 @@ async function mutation<T>(
       && typeof reason.status === "number"
     ) ? reason.status : 500;
     const message = reason instanceof Error ? reason.message : "WebUI mutation failed";
-    throw new ApiError(status, message);
+    const responseUnknown = typeof reason === "object" && reason !== null
+      && "responseUnknown" in reason && reason.responseUnknown === true;
+    throw new ApiError(status, message, responseUnknown);
   }
 }
 
@@ -1088,6 +1090,15 @@ export async function fetchSettingsUsage(
 }
 
 export type UpdateChannel = "stable" | "preview";
+export type ForkUpdateTarget = { tag: string; commit: string };
+export function startForkUpdate(client: WebUIMutationTransport, target: ForkUpdateTarget, revision: number) {
+  return mutation<{ version: string }>(client, "settings.nanobot.update.fork", { ...target, revision }, 90_000);
+}
+export function readForkUpdate(token: string) {
+  return request<{ runningVersion: string; last: (ForkUpdateTarget & { phase: "installing" | "restarting" | "failed" }) | null }>(
+    "/api/settings/nanobot-update/fork/status", token, undefined, 5_000,
+  );
+}
 export interface ReleaseStatus {
   channel: UpdateChannel;
   revision: number;
@@ -1095,6 +1106,7 @@ export interface ReleaseStatus {
   state: "available" | "current" | "ahead" | "waiting_stable" | "withdrawn" | "unavailable" | "publishing" | "unsupported";
 }
 export interface VersionCheckResult {
+  forkTarget?: ForkUpdateTarget;
   installation_method?: UpdateMethod | null;
   releaseStatus?: ReleaseStatus;
   can_change_channel?: boolean;

@@ -63,7 +63,8 @@ def select(channel):
     ],
 )
 def test_release_version_accepts_only_fork_tags(tag, expected):
-    assert version_check._release_version(tag) == expected
+    from nanobot.repository import fork_version
+    assert fork_version(tag) == expected
 
 
 async def test_current_fork_tag_is_up_to_date_and_ignores_upstream_tags(releases):
@@ -77,6 +78,7 @@ async def test_current_fork_tag_is_up_to_date_and_ignores_upstream_tags(releases
 async def test_newer_fork_tag_is_offered_with_its_release_url(releases):
     releases.tags.append("v0.4.3-xm.2")
     result = await version_check.check_for_update()
+    assert result["forkTarget"] == {"tag": "v0.4.3-xm.2", "commit": "a" * 40}
     assert result["updateAvailable"] == {
         "currentVersion": "0.4.2+xm.1",
         "latestVersion": "0.4.3+xm.2",

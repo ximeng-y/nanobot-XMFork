@@ -2168,7 +2168,7 @@ function Shell({
       && versionCheck.result?.type === "update" && versionCheck.result.latestVersion !== versionCheck.dismissedVersion
       ? { version: versionCheck.result.latestVersion, onDismiss: versionCheck.dismiss,
         onRequestUpdate: updateFlow.pending ? updateFlow.open : undefined,
-        installationMethod: updateFlow.pending ? null : versionCheck.installationMethod }
+        installationMethod: null }
       : undefined,
     onOpenApps,
     onOpenAutomations,

@@ -97,6 +97,45 @@ export interface WebUIMutationTransport {
   ): Promise<T>;
 }
 
+export interface MemoryDocument {
+  path: string;
+}
+
+export interface MemoryImportEntry {
+  id: string;
+  name: string;
+  bytes: number;
+  imported_at: string;
+  status: "pending" | "failed" | "archived";
+  error?: string;
+  archived_at?: string;
+}
+
+export interface MemoryPayload {
+  documents: MemoryDocument[];
+  imports: MemoryImportEntry[];
+  max_import_bytes: number;
+}
+
+export interface MemoryDocumentPayload {
+  path: string;
+  content: string;
+}
+
+export interface MemoryImportPayload {
+  entry: MemoryImportEntry;
+}
+
+export interface MemoryImportPreviewPayload {
+  entry: MemoryImportEntry;
+  content: string;
+}
+
+export interface MemoryArchiveDeletePayload {
+  deleted: string[];
+  failed: string[];
+}
+
 async function request<T>(
   url: string,
   token: string,
@@ -930,6 +969,69 @@ export function deleteManagedAttachments(
   return mutation<ManagedAttachmentDeleteResult>(
     transport,
     "attachments.delete",
+    { ids },
+  );
+}
+
+export function fetchMemory(
+  token: string,
+  base: string = "",
+): Promise<MemoryPayload> {
+  return request<MemoryPayload>(
+    `${base}/api/memory`,
+    token,
+    undefined,
+    API_READ_TIMEOUT_MS,
+  );
+}
+
+export function fetchMemoryDocument(
+  token: string,
+  path: string,
+  base: string = "",
+): Promise<MemoryDocumentPayload> {
+  const params = new URLSearchParams({ path });
+  return request<MemoryDocumentPayload>(
+    `${base}/api/memory/document?${params}`,
+    token,
+    undefined,
+    API_READ_TIMEOUT_MS,
+  );
+}
+
+export function fetchMemoryImport(
+  token: string,
+  id: string,
+  base: string = "",
+): Promise<MemoryImportPreviewPayload> {
+  const params = new URLSearchParams({ id });
+  return request<MemoryImportPreviewPayload>(
+    `${base}/api/memory/import?${params}`,
+    token,
+    undefined,
+    API_READ_TIMEOUT_MS,
+  );
+}
+
+export function importMemoryFile(
+  transport: WebUIMutationTransport,
+  name: string,
+  contentBase64: string,
+): Promise<MemoryImportPayload> {
+  return mutation<MemoryImportPayload>(
+    transport,
+    "memory.import",
+    { name, content_base64: contentBase64 },
+  );
+}
+
+export function deleteArchivedMemoryImports(
+  transport: WebUIMutationTransport,
+  ids: string[],
+): Promise<MemoryArchiveDeletePayload> {
+  return mutation<MemoryArchiveDeletePayload>(
+    transport,
+    "memory.archive.delete",
     { ids },
   );
 }

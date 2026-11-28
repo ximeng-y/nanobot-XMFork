@@ -127,7 +127,8 @@ jobs:
         run: |
           python -I scripts/verify_packaged_update.py \
             --wheel "$ACCEPTANCE_WHEEL" --commit "$ACCEPTANCE_COMMIT" \
-            --output "$RUNNER_TEMP/packaged-update" --workers 2
+            --output "$RUNNER_TEMP/packaged-update" --workers 2 \
+            ${{ !inputs.candidate && '--normalize-local-version' || '' }}
 
       # Raw acceptance logs contain disposable credentials. Export only structured evidence.
       - name: Retain native acceptance evidence

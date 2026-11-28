@@ -1,19 +1,33 @@
 import asyncio
+import base64
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from nanobot.agent.context_governance import ContextWindowExceededError
 from nanobot.agent.dream import run_dream
 from nanobot.agent.memory import MemoryStore
 from nanobot.bus.events import OutboundMessage
 
 
-def response(reason="completed"):
+def response(reason="completed", content="done"):
     return OutboundMessage(
-        channel="cli", chat_id="dream", content="done", metadata={"_stop_reason": reason},
+        channel="cli", chat_id="dream", content=content, metadata={"_stop_reason": reason},
     )
+
+
+def import_markdown(store, name: str, content: str):
+    return store.imports.import_bytes(
+        name,
+        base64.b64encode(content.encode("utf-8")).decode("ascii"),
+    )
+
+
+def import_id_from_prompt(prompt: str) -> str:
+    marker = "File ID: `"
+    return prompt.split(marker, 1)[1].split("`", 1)[0]
 
 
 def loop_for(store, process):
@@ -22,6 +36,41 @@ def loop_for(store, process):
         sessions=SimpleNamespace(state=SimpleNamespace(prune_dream_sessions=AsyncMock())),
         dream_runtime=lambda: None,
         process_direct=process,
+    )
+
+
+def test_foreground_work_check_ignores_unrelated_background_tasks():
+    from nanobot.agent.loop import AgentLoop
+
+    loop = object.__new__(AgentLoop)
+    loop.bus = SimpleNamespace(inbound_size=0)
+    loop._pending_queues = {}
+    loop._active_tasks = {}
+    loop._background_tasks = {object()}
+
+    assert loop.has_foreground_work() is False
+
+    loop.bus.inbound_size = 1
+    assert loop.has_foreground_work() is True
+    loop.bus.inbound_size = 0
+    loop._pending_queues = {"user:1": object()}
+    assert loop.has_foreground_work() is True
+    loop._pending_queues = {}
+    loop._active_tasks = {"user:1": {object()}}
+    assert loop.has_foreground_work() is True
+
+
+def test_import_completion_marker_must_be_the_last_nonempty_line():
+    import_id = "a" * 32
+    marker = MemoryStore.import_completion_marker(import_id)
+
+    assert MemoryStore.dream_import_completed(
+        response(content=f"Memory checked.\n{marker}\n"),
+        import_id,
+    )
+    assert not MemoryStore.dream_import_completed(
+        response(content=f"{marker}\nmore text"),
+        import_id,
     )
 
 
@@ -184,3 +233,237 @@ async def test_overlapping_manual_and_periodic_runs_do_not_repeat_history(tmp_pa
     assert all(outcome.error is None for outcome in outcomes)
     assert [outcome.had_input for outcome in outcomes] == [True, False]
     assert store.get_last_dream_cursor() == 1
+
+
+@pytest.mark.asyncio
+async def test_imported_files_are_archived_only_after_independent_confirmation(tmp_path):
+    store = MemoryStore(tmp_path)
+    store.git.init()
+    changed = import_markdown(store, "changed.md", "# Changed\nDurable fact")
+    unchanged = import_markdown(store, "unchanged.md", "# Nothing\nNo durable fact")
+    failed = import_markdown(store, "failed.md", "# Failed\nKeep the original")
+
+    async def process(prompt, **kwargs):
+        import_id = import_id_from_prompt(prompt)
+        if "Durable fact" in prompt:
+            store.write_memory("# Memory\nDurable fact")
+            return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+        if "No durable fact" in prompt:
+            return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+        return response(content="Finished without confirming the import")
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    entries = {entry["id"]: entry for entry in store.imports.list_entries()}
+    assert result.had_input is True
+    assert result.changed is True
+    assert result.error and "1 imported file failed" in result.error
+    assert entries[changed["id"]]["status"] == "archived"
+    assert entries[unchanged["id"]]["status"] == "archived"
+    assert entries[failed["id"]]["status"] == "failed"
+    assert entries[failed["id"]]["error"]
+    assert store.imports.read_import(failed["id"])[1] == "# Failed\nKeep the original"
+    assert store.read_memory() == "# Memory\nDurable fact"
+    assert result.commit_sha
+    _, diff = store.git.show_commit_diff(result.commit_sha)
+    assert "memory/MEMORY.md" in diff and "Durable fact" in diff
+    assert "content.md" not in diff
+    assert store.get_last_dream_cursor() == 0
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_import_retries_with_full_text_then_archives(tmp_path):
+    store = MemoryStore(tmp_path)
+    imported = import_markdown(
+        store,
+        "retry.md",
+        "# Retry\nFULL-CONTENT-TAIL\nNo durable change",
+    )
+    prompts = []
+
+    async def unconfirmed(prompt, **kwargs):
+        prompts.append(prompt)
+        return response(content="I stopped early")
+
+    first = await run_dream(loop_for(store, unconfirmed), commit_prefix="dream: manual run")
+
+    assert first.error and "1 imported file failed" in first.error
+    assert store.imports.list_entries()[0]["status"] == "failed"
+
+    async def confirmed(prompt, **kwargs):
+        prompts.append(prompt)
+        assert "FULL-CONTENT-TAIL" in prompt
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    second = await run_dream(loop_for(store, confirmed), commit_prefix="dream: manual run")
+
+    assert second.error is None
+    assert second.had_input is True
+    assert store.imports.list_entries()[0]["id"] == imported["id"]
+    assert store.imports.list_entries()[0]["status"] == "archived"
+    assert len(prompts) == 2
+    assert store.get_last_dream_cursor() == 0
+
+
+@pytest.mark.asyncio
+async def test_import_uses_a_nonpersisting_session_policy(tmp_path):
+    store = MemoryStore(tmp_path)
+    import_markdown(store, "temporary.md", "# Temporary\nDo not persist the prompt")
+    policies = []
+
+    async def process(prompt, **kwargs):
+        policies.append(kwargs.get("_session_policy"))
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    assert result.error is None
+    assert len(policies) == 1
+    assert policies[0] is not None
+    assert policies[0].persist is False
+    assert policies[0].log_content is False
+
+
+@pytest.mark.asyncio
+async def test_import_turn_does_not_persist_a_dream_session(tmp_path):
+    from nanobot.agent.loop import AgentLoop
+    from nanobot.bus.queue import MessageBus
+    from nanobot.providers.base import GenerationSettings, LLMResponse
+
+    provider = MagicMock()
+    provider.get_default_model.return_value = "test-model"
+    provider.supports_tools = True
+    provider.generation = GenerationSettings()
+    provider.estimate_prompt_tokens.return_value = (1_000, "test-provider")
+
+    async def chat(**kwargs):
+        prompt = "\n".join(str(message.get("content", "")) for message in kwargs["messages"])
+        import_id = import_id_from_prompt(prompt)
+        return LLMResponse(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    provider.chat_stream_with_retry = AsyncMock(side_effect=chat)
+    loop = AgentLoop(
+        bus=MessageBus(),
+        provider=provider,
+        workspace=tmp_path,
+        context_window_tokens=100_000,
+    )
+    store = loop.context.memory
+    try:
+        import_markdown(store, "temporary.md", "# Temporary\nDo not persist the prompt")
+        result = await run_dream(loop, commit_prefix="dream: manual run")
+
+        assert result.error is None
+        assert await loop.sessions.state.list_sessions() == []
+    finally:
+        await loop.sessions.state.aclose()
+
+
+@pytest.mark.asyncio
+async def test_import_added_during_dream_waits_for_next_run(tmp_path):
+    store = MemoryStore(tmp_path)
+    first = import_markdown(store, "first.md", "# First\nInitial document")
+    calls = 0
+    late = {}
+
+    async def process(prompt, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            late["entry"] = import_markdown(store, "late.md", "# Late\nNext document")
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    loop = loop_for(store, process)
+    first_result = await run_dream(loop, commit_prefix="dream: manual run")
+    entries = {entry["id"]: entry["status"] for entry in store.imports.list_entries()}
+
+    assert first_result.error is None
+    assert entries[first["id"]] == "archived"
+    assert entries[late["entry"]["id"]] == "pending"
+
+    second_result = await run_dream(loop, commit_prefix="dream: manual run")
+    entries = {entry["id"]: entry["status"] for entry in store.imports.list_entries()}
+
+    assert second_result.error is None
+    assert entries[first["id"]] == "archived"
+    assert entries[late["entry"]["id"]] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_history_cursor_and_imports_share_one_dream_run_without_advancing_on_import(tmp_path):
+    store = MemoryStore(tmp_path)
+    store.append_history("Pending chat summary")
+    imported = import_markdown(store, "source.md", "# Source\nExternal material")
+    calls = []
+
+    async def process(prompt, **kwargs):
+        if "## Conversation History" in prompt:
+            calls.append("history")
+            return response()
+        calls.append("import")
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    assert result.error is None
+    assert calls == ["history", "import"]
+    assert store.get_last_dream_cursor() == 1
+    assert store.imports.list_entries()[0]["id"] == imported["id"]
+    assert store.imports.list_entries()[0]["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_history_context_overflow_does_not_block_imports_or_advance_cursor(tmp_path):
+    store = MemoryStore(tmp_path)
+    store.append_history("Pending chat summary")
+    imported = import_markdown(store, "source.md", "# Source\nUsable external material")
+    calls = []
+
+    async def process(prompt, **kwargs):
+        if "## Conversation History" in prompt:
+            calls.append("history")
+            raise ContextWindowExceededError(
+                session_key=kwargs["session_key"],
+                estimated_tokens=20_000,
+                input_budget=8_000,
+                source="test",
+            )
+        calls.append("import")
+        import_id = import_id_from_prompt(prompt)
+        return response(content=f"DREAM-IMPORT-COMPLETE:{import_id}")
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    entry = store.imports.list_entries()[0]
+    assert calls == ["history", "import"]
+    assert result.error
+    assert result.had_input is True
+    assert store.get_last_dream_cursor() == 0
+    assert entry["id"] == imported["id"]
+    assert entry["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_import_that_does_not_fit_model_context_stays_pending(tmp_path):
+    store = MemoryStore(tmp_path)
+    imported = import_markdown(store, "large.md", "# Large\nFull source")
+
+    async def process(prompt, **kwargs):
+        raise ContextWindowExceededError(
+            session_key=kwargs["session_key"],
+            estimated_tokens=20_000,
+            input_budget=8_000,
+            source="test",
+        )
+
+    result = await run_dream(loop_for(store, process), commit_prefix="dream: manual run")
+
+    entry = store.imports.list_entries()[0]
+    assert result.error and "1 imported file failed" in result.error
+    assert entry["id"] == imported["id"]
+    assert entry["status"] == "failed"
+    assert entry["error"] == "Imported file exceeds the Dream model context"

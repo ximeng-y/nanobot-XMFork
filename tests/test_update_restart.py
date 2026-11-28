@@ -48,6 +48,8 @@ from nanobot.update_worker import (
     write_record,
 )
 
+OFFICIAL_TEST_VERSION = "0.4.2"
+
 
 def _port():
     with socket.socket() as listener:
@@ -84,6 +86,12 @@ def private_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(root))
     monkeypatch.setenv("USERPROFILE", str(root))
     return root
+
+
+@pytest.fixture
+def official_version(monkeypatch):
+    monkeypatch.setattr(nanobot, "__version__", OFFICIAL_TEST_VERSION)
+    return OFFICIAL_TEST_VERSION
 
 
 def _job(previous, *, legacy_scope=False):
@@ -130,7 +138,9 @@ def _job(previous, *, legacy_scope=False):
 
 @pytest.mark.skipif(os.name == "nt", reason="Native Windows lifecycle execution requires a Windows runner")
 @pytest.mark.parametrize("legacy_scope", [False, True])
-def test_actual_gateway_is_parked_until_exact_runtime_activation(private_home, tmp_path, monkeypatch, legacy_scope):
+def test_actual_gateway_is_parked_until_exact_runtime_activation(
+    private_home, tmp_path, monkeypatch, official_version, legacy_scope,
+):
     from nanobot import update_restart
 
     profile = tmp_path / "gateway home"
@@ -152,6 +162,8 @@ def test_actual_gateway_is_parked_until_exact_runtime_activation(private_home, t
     bootstrap = (
         f"import sys, runpy; sys.path.insert(0, {str(source)!r})\n"
         "from pathlib import Path\nimport os\n"
+        "import nanobot\n"
+        f"nanobot.__version__ = {official_version!r}\n"
         "from nanobot.cli import gateway_runtime\n"
         "from nanobot.agent.tools.mcp import MCPProvider\n"
         "gateway_runtime.warmup_token_encoding = lambda: None\n"

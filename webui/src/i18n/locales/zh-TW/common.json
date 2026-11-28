@@ -453,7 +453,8 @@
       "ariaLabel": "切換語言"
     },
     "apps": "應用程式",
-    "automations": "任務"
+    "automations": "任務",
+    "memory": "記憶"
   },
   "settings": {
     "timezoneNoMatches": "沒有符合的時區。",
@@ -2663,6 +2664,68 @@
       "retry": "重試",
       "cancel": "取消",
       "switchDirectory": "切換目錄"
+    }
+  },
+  "memory": {
+    "title": "記憶",
+    "description": "瀏覽目前 Agent 的常駐記憶與 Wiki，也可以匯入 Markdown 交由 Dream 整理。",
+    "scope": "目前 Agent 工作區",
+    "refresh": "重新整理",
+    "refreshing": "正在重新整理…",
+    "tabs": {
+      "library": "記憶庫",
+      "imports": "匯入與封存",
+      "ariaLabel": "記憶頁面"
+    },
+    "library": {
+      "resident": "常駐記憶",
+      "wiki": "Wiki",
+      "wikiIndex": "Wiki 首頁",
+      "empty": "尚無記憶檔案。",
+      "loading": "正在載入記憶…",
+      "loadError": "無法載入記憶。",
+      "documentLoading": "正在載入文件…",
+      "documentError": "無法載入這份文件。",
+      "backToFiles": "檔案",
+      "selectFile": "從左側清單選擇文件即可閱讀。",
+      "linkUnavailable": "這個連結不在目前記憶庫中。"
+    },
+    "imports": {
+      "dreamHint": "由 Dream 自動整理，也可在聊天中輸入 /dream。",
+      "chooseFiles": "選擇 Markdown 檔案",
+      "uploading": "正在上傳…",
+      "uploaded": "已上傳",
+      "uploadFailed": "上傳失敗",
+      "maxSize": "每個檔案上限 {{size}}。",
+      "uploadSummary": "{{succeeded}} 個上傳成功，{{failed}} 個失敗。",
+      "status": {
+        "pending": "待整理",
+        "failed": "失敗",
+        "archived": "已封存"
+      },
+      "importedAt": "匯入於 {{date}}",
+      "archivedAt": "封存於 {{date}}",
+      "preview": "預覽原文",
+      "delete": "刪除",
+      "previewTitle": "匯入原文",
+      "previewLoading": "正在載入原文…",
+      "previewError": "無法載入原文。",
+      "pending": "待整理",
+      "archived": "已封存",
+      "emptyPending": "沒有等待整理的文件。",
+      "emptyArchived": "尚無封存的原文。",
+      "selectFile": "選擇 {{name}}",
+      "deleteSelected": "刪除所選（{{count}}）",
+      "selectedCount": "已選 {{count}} 項",
+      "clearSelection": "取消選取",
+      "deleteConfirmTitle": "刪除匯入原文？",
+      "deleteConfirmDescription": "只會刪除所選原文，已寫入的記憶不會撤回。",
+      "deleteSuccess": "已刪除 {{count}} 份原文。",
+      "deletePartial": "已刪除 {{deleted}} 份，{{failed}} 份未能刪除。",
+      "deleteError": "無法刪除所選原文。",
+      "deleteFailedItem": "{{name}} 未能刪除。",
+      "onlyMarkdown": "只能匯入 .md 檔案。",
+      "tooLarge": "檔案超過 {{size}}。"
     }
   }
 }

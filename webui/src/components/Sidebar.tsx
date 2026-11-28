@@ -1,6 +1,7 @@
 import {
   ArchiveIcon,
   AutomationsIcon,
+  MemoryIcon,
   SearchIcon,
   SettingsIcon,
   ComposeIcon,
@@ -65,9 +66,10 @@ interface SidebarProps {
   availableUpdate?: { version: string; onDismiss: () => void; onRequestUpdate?: () => void; installationMethod?: UpdateMethod | null };
   onOpenApps: () => void;
   onOpenAutomations: () => void;
+  onOpenMemory: () => void;
   onSettingsIntent?: () => void;
   onOpenSearch: () => void;
-  activeUtility?: "apps" | "automations" | null;
+  activeUtility?: "apps" | "automations" | "memory" | null;
   onToggleArchived: () => void;
   onCollapse?: () => void;
   onExpand?: () => void;
@@ -337,6 +339,13 @@ export function Sidebar(props: SidebarProps) {
             onClick={props.onOpenAutomations}
             active={props.activeUtility === "automations"}
             icon={<AutomationsIcon className="h-4 w-4" />}
+          />
+          <SidebarActionButton
+            {...footerActionProps}
+            label={t("sidebar.memory", { defaultValue: "Memory" })}
+            onClick={props.onOpenMemory}
+            active={props.activeUtility === "memory"}
+            icon={<MemoryIcon className="h-4 w-4" />}
           />
         </SidebarSelectionHighlight>
         <div className={cn("flex min-w-0 items-center gap-1", desktopDock ? "sidebar-dock-footer-row" : collapsed && "flex-col")}>

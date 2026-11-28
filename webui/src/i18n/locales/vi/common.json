@@ -453,7 +453,8 @@
       "ariaLabel": "Đổi ngôn ngữ"
     },
     "apps": "Ứng dụng",
-    "automations": "Tự động hóa"
+    "automations": "Tự động hóa",
+    "memory": "Bộ nhớ"
   },
   "settings": {
     "timezoneNoMatches": "Không tìm thấy múi giờ phù hợp.",
@@ -2663,6 +2664,68 @@
       "retry": "Thử lại",
       "cancel": "Hủy",
       "switchDirectory": "Đổi thư mục"
+    }
+  },
+  "memory": {
+    "title": "Bộ nhớ",
+    "description": "Xem bộ nhớ thường trú và wiki của Agent hiện tại, hoặc nhập tệp Markdown để Dream tự sắp xếp.",
+    "scope": "Không gian làm việc của Agent hiện tại",
+    "refresh": "Làm mới",
+    "refreshing": "Đang làm mới…",
+    "tabs": {
+      "library": "Thư viện",
+      "imports": "Nhập và lưu trữ",
+      "ariaLabel": "Các mục bộ nhớ"
+    },
+    "library": {
+      "resident": "Bộ nhớ thường trú",
+      "wiki": "Wiki",
+      "wikiIndex": "Trang chủ Wiki",
+      "empty": "Chưa có tệp bộ nhớ.",
+      "loading": "Đang tải bộ nhớ…",
+      "loadError": "Không thể tải bộ nhớ.",
+      "documentLoading": "Đang tải tài liệu…",
+      "documentError": "Không thể tải tài liệu này.",
+      "backToFiles": "Tệp",
+      "selectFile": "Chọn một tệp trong danh sách để đọc.",
+      "linkUnavailable": "Liên kết này không thuộc thư viện bộ nhớ hiện tại."
+    },
+    "imports": {
+      "dreamHint": "Dream tự sắp xếp các tệp đã nhập. Bạn cũng có thể dùng /dream trong cuộc trò chuyện.",
+      "chooseFiles": "Chọn tệp Markdown",
+      "uploading": "Đang tải lên…",
+      "uploaded": "Đã tải lên",
+      "uploadFailed": "Tải lên thất bại",
+      "maxSize": "Tối đa {{size}} mỗi tệp.",
+      "uploadSummary": "{{succeeded}} tệp đã tải lên; {{failed}} tệp thất bại.",
+      "status": {
+        "pending": "Đang chờ",
+        "failed": "Thất bại",
+        "archived": "Đã lưu trữ"
+      },
+      "importedAt": "Đã nhập {{date}}",
+      "archivedAt": "Đã lưu trữ {{date}}",
+      "preview": "Xem bản gốc",
+      "delete": "Xóa",
+      "previewTitle": "Bản nhập gốc",
+      "previewLoading": "Đang tải bản gốc…",
+      "previewError": "Không thể tải tệp gốc.",
+      "pending": "Đang chờ",
+      "archived": "Đã lưu trữ",
+      "emptyPending": "Không có tệp nào chờ sắp xếp.",
+      "emptyArchived": "Chưa có bản nhập nào được lưu trữ.",
+      "selectFile": "Chọn {{name}}",
+      "deleteSelected": "Xóa mục đã chọn ({{count}})",
+      "selectedCount": "Đã chọn {{count}}",
+      "clearSelection": "Bỏ chọn",
+      "deleteConfirmTitle": "Xóa các bản nhập?",
+      "deleteConfirmDescription": "Chỉ xóa các tệp gốc đã chọn. Bộ nhớ đã được ghi từ các tệp này sẽ không bị thu hồi.",
+      "deleteSuccess": "Đã xóa {{count}} bản nhập.",
+      "deletePartial": "Đã xóa {{deleted}}; không thể xóa {{failed}}.",
+      "deleteError": "Không thể xóa các bản nhập đã chọn.",
+      "deleteFailedItem": "Không thể xóa {{name}}.",
+      "onlyMarkdown": "Chỉ có thể nhập tệp .md.",
+      "tooLarge": "Tệp lớn hơn {{size}}."
     }
   }
 }

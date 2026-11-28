@@ -1012,28 +1012,39 @@ def run(args) -> dict:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from scripts.build_tui_wheels import wheel_files
 
-    target = args.wheel.resolve(strict=True)
-    _, parsed_version, _, tags = parse_wheel_filename(target.name)
-    version = str(parsed_version)
+    source_target = args.wheel.resolve(strict=True)
+    _, parsed_version, _, tags = parse_wheel_filename(source_target.name)
+    source_version = str(parsed_version)
     if len(tags) != 1 or any(tag.platform == "any" for tag in tags):
         raise ValueError("Acceptance requires the final native wheel, not an intermediate universal wheel")
-    files, _, _ = wheel_files(target, version, platform=next(iter(tags)).platform)
+    files, _, _ = wheel_files(source_target, source_version, platform=next(iter(tags)).platform)
     if files["nanobot/_build_commit.txt"].decode().strip() != args.commit:
         raise ValueError("Target wheel does not contain the requested candidate commit")
-    original_hash = digest(target)
+    source_hash = digest(source_target)
     scenarios = list(args.scenario or SCENARIOS)
     if len(set(scenarios)) != len(scenarios):
         raise ValueError("Select each scenario only once")
     root = args.output.resolve()
     root.mkdir(mode=0o700)  # Exclusive evidence root. Never use a user's installation.
+    target = source_target
+    target_version = source_version
+    target_hash = source_hash
+    target_derived = bool(args.normalize_local_version and parsed_version.local)
+    if target_derived:
+        target_version = parsed_version.public
+        target = fixture_wheel(source_target, root / "target", target_version)
+        target_hash = digest(target)
     timings = Timings(root / "packaged-update-timings.json")
     workers = min(args.workers, len(scenarios))
     runner = run_parallel if workers > 1 else run_serial
-    results = runner(args, root, target, version, original_hash, scenarios, timings)
+    results = runner(args, root, target, target_version, target_hash, scenarios, timings)
     check_coverage(results, scenarios)
-    assert digest(target) == original_hash
+    assert digest(source_target) == source_hash
+    assert digest(target) == target_hash
     return {"platform": platform.system(), "machine": platform.machine(), "python": platform.python_version(),
-            "target_sha256": original_hash, "candidate_commit": args.commit, "version": version,
+            "target_sha256": target_hash, "target_source_version": source_version,
+            "target_source_sha256": source_hash, "target_derived": target_derived,
+            "candidate_commit": args.commit, "version": target_version,
             "release_transport": "local fixture; no public-download proof", "interactive_ui_e2e": False,
             "release_approval": "private unsigned fixture; not signature acceptance", "workers": workers,
             "scenario_count": len(results), "journey_count": sum(1 + ("subsequent_update" in result) for result in results),
@@ -1045,6 +1056,8 @@ def main() -> None:
     parser.add_argument("--wheel", type=Path)
     parser.add_argument("--baseline-wheel", type=Path)
     parser.add_argument("--commit")
+    parser.add_argument("--normalize-local-version", action="store_true",
+                        help="Derive a public-version upgrade target from a fork local version")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--scenario", action="append", choices=SCENARIOS)
     parser.add_argument("--workers", type=int, default=1,

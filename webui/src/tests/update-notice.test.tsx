@@ -188,7 +188,7 @@ describe("Sidebar update entry", () => {
     const props = { sessions: [], activeKey: null, loading: false,
       onNewChat: noop, onSelect: noop, onRequestDelete: noop, onTogglePin: noop, onRequestRename: noop,
       onToggleArchive: noop, onToggleGroup: noop, onRequestRenameProject: noop, onNewChatInProject: noop,
-      onOpenSettings: noop, onOpenApps: noop, onOpenAutomations: noop,
+      onOpenSettings: noop, onOpenApps: noop, onOpenAutomations: noop, onOpenMemory: noop,
       onOpenSearch: noop, onToggleArchived: noop, onOpenUpdates: noop,
       availableUpdate: { version: "0.3.6", onDismiss: noop } };
     const { rerender } = render(<ClientProvider client={client} token="test"><Sidebar {...props} /></ClientProvider>);

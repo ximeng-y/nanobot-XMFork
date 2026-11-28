@@ -18,6 +18,7 @@ from nanobot.webui.gateway_endpoint import WebUIGatewayEndpoint
 from nanobot.webui.gateway_tokens import GatewayTokenStore
 from nanobot.webui.ingress_policy import WebUIIngressPolicy
 from nanobot.webui.media_gateway import WebUIMediaGateway
+from nanobot.webui.memory import WebUIMemoryService
 from nanobot.webui.session_projection import WebUISessionProjection
 from nanobot.webui.settings_services import WebUISettingsServices
 from nanobot.webui.temporary_chats import WebUITemporaryChats
@@ -43,6 +44,7 @@ class GatewayServices:
     settings: WebUISettingsServices
     tokens: GatewayTokenStore
     media: WebUIMediaGateway
+    memory: WebUIMemoryService
     uploads: AttachmentHTTP
     attachments: AttachmentService
     ingress: WebUIIngressPolicy
@@ -128,6 +130,7 @@ def build_gateway_services(
         logger=logger,
         attachments=attachments,
     )
+    memory = WebUIMemoryService(workspace_path)
     uploads = AttachmentHTTP(AttachmentStore(
         attachments.data_dir / "media" / "websocket",
         limits=ingress.attachments,
@@ -160,6 +163,7 @@ def build_gateway_services(
         bus=bus,
         tokens=tokens,
         media=media,
+        memory=memory,
         attachments=attachments,
         uploads=uploads,
         ingress=ingress,
@@ -195,6 +199,7 @@ def build_gateway_services(
         settings=settings,
         tokens=tokens,
         media=media,
+        memory=memory,
         uploads=uploads,
         attachments=attachments,
         ingress=ingress,

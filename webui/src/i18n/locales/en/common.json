@@ -453,7 +453,8 @@
       "ariaLabel": "Change language"
     },
     "apps": "Apps",
-    "automations": "Automations"
+    "automations": "Automations",
+    "memory": "Memory"
   },
   "settings": {
     "timezoneNoMatches": "No matching timezones.",
@@ -2845,6 +2846,68 @@
       "retry": "Try again",
       "cancel": "Cancel",
       "switchDirectory": "Switch directory"
+    }
+  },
+  "memory": {
+    "title": "Memory",
+    "description": "Browse the current agent's resident memory and wiki, or import Markdown for Dream to organize.",
+    "scope": "Current agent workspace",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "tabs": {
+      "library": "Library",
+      "imports": "Import & archive",
+      "ariaLabel": "Memory views"
+    },
+    "library": {
+      "resident": "Resident memory",
+      "wiki": "Wiki",
+      "wikiIndex": "Wiki home",
+      "empty": "No memory files yet.",
+      "loading": "Loading memory…",
+      "loadError": "Could not load memory.",
+      "documentLoading": "Loading document…",
+      "documentError": "Could not load this document.",
+      "backToFiles": "Files",
+      "selectFile": "Choose a file from the list to read it.",
+      "linkUnavailable": "That link is not part of the memory library."
+    },
+    "imports": {
+      "dreamHint": "Dream organizes imports automatically. You can also use /dream in chat.",
+      "chooseFiles": "Choose Markdown files",
+      "uploading": "Uploading…",
+      "uploaded": "Uploaded",
+      "uploadFailed": "Not uploaded",
+      "maxSize": "Up to {{size}} per file.",
+      "uploadSummary": "{{succeeded}} uploaded; {{failed}} failed.",
+      "status": {
+        "pending": "Pending",
+        "failed": "Failed",
+        "archived": "Archived"
+      },
+      "importedAt": "Imported {{date}}",
+      "archivedAt": "Archived {{date}}",
+      "preview": "Preview original",
+      "delete": "Delete",
+      "previewTitle": "Original import",
+      "previewLoading": "Loading original…",
+      "previewError": "Could not load the original file.",
+      "pending": "Pending",
+      "archived": "Archived",
+      "emptyPending": "Nothing is waiting to be organized.",
+      "emptyArchived": "No archived imports.",
+      "selectFile": "Select {{name}}",
+      "deleteSelected": "Delete selected ({{count}})",
+      "selectedCount": "{{count}} selected",
+      "clearSelection": "Clear selection",
+      "deleteConfirmTitle": "Delete imports?",
+      "deleteConfirmDescription": "This deletes the selected original files only. Memories already written from them are not removed.",
+      "deleteSuccess": "Deleted {{count}} import(s).",
+      "deletePartial": "Deleted {{deleted}}; {{failed}} could not be deleted.",
+      "deleteError": "Could not delete the selected imports.",
+      "deleteFailedItem": "{{name}} was not deleted.",
+      "onlyMarkdown": "Only .md files can be imported.",
+      "tooLarge": "This file is larger than {{size}}."
     }
   }
 }

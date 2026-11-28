@@ -567,11 +567,20 @@ def fetch_release(version, manifest_hash, cache, dry_run):
         temporary.unlink(missing_ok=True)
 
 expected_hash = sys.argv[2]
-if sys.argv[4] not in ("", "-"):
+official_release = sys.argv[4] not in ("", "-")
+if official_release:
     path, expected_hash = fetch_release(sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7] == "1")
 else:
     path = Path(sys.argv[1]).absolute()
-match = re.fullmatch(r"nanobot_ai-(\d+\.\d+\.\d+(?:\.dev\d+|\.post\d+)?)-py3-none-(macosx_13_0_(?:arm64|x86_64)|manylinux_2_17_(?:aarch64|x86_64)|win_amd64)\.whl", path.name)
+version_pattern = r"\d+\.\d+\.\d+(?:\.dev\d+|\.post\d+)?"
+if not official_release:
+    local_component = r"(?:[a-z0-9]*[a-z][a-z0-9]*|0|[1-9][0-9]*)"
+    version_pattern += rf"(?:\+{local_component}(?:\.{local_component})*)?"
+match = re.fullmatch(
+    rf"nanobot_ai-({version_pattern})-py3-none-"
+    r"(macosx_13_0_(?:arm64|x86_64)|manylinux_2_17_(?:aarch64|x86_64)|win_amd64)\.whl",
+    path.name,
+)
 if not match or path.is_symlink() or not path.is_file() or not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
     raise SystemExit("Expected a saved native nanobot wheel and its published SHA-256")
 with path.open("rb") as stream:

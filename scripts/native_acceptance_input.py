@@ -9,6 +9,17 @@ import tomllib
 from pathlib import Path
 from zipfile import ZipFile
 
+_NUMERIC_COMPONENT = r"(?:0|[1-9]\d*)"
+_OFFICIAL_VERSION = (
+    rf"{_NUMERIC_COMPONENT}\.{_NUMERIC_COMPONENT}\.{_NUMERIC_COMPONENT}"
+    rf"(?:\.(?:dev|post){_NUMERIC_COMPONENT})?"
+)
+_LOCAL_COMPONENT = r"(?:[a-z0-9]*[a-z][a-z0-9]*|0|[1-9]\d*)"
+_OFFICIAL_ACCEPTANCE_VERSION = re.compile(_OFFICIAL_VERSION)
+_FORK_ACCEPTANCE_VERSION = re.compile(
+    rf"{_OFFICIAL_VERSION}(?:\+{_LOCAL_COMPONENT}(?:\.{_LOCAL_COMPONENT})*)?"
+)
+
 
 def acceptance_input(directory: Path, *, tag: str, commit: str,
                      manifest_sha256: str = "", version: str = "") -> dict[str, str]:
@@ -22,7 +33,8 @@ def acceptance_input(directory: Path, *, tag: str, commit: str,
         if manifest["candidate_commit"] != commit:
             raise ValueError("Candidate commit differs from the build output")
         version = manifest["version"]
-    if not re.fullmatch(r"[0-9][A-Za-z0-9.]*", version):
+    version_pattern = _OFFICIAL_ACCEPTANCE_VERSION if manifest_sha256 else _FORK_ACCEPTANCE_VERSION
+    if not version_pattern.fullmatch(version):
         raise ValueError("Invalid acceptance version")
     filename = f"nanobot_ai-{version}-py3-none-{tag}.whl"
     wheel = directory / filename

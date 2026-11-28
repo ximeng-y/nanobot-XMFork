@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from nanobot.agent.memory_imports import MemoryImportStore
 from nanobot.config.paths import DREAM_CURSOR_PATH, MEMORY_CURSOR_PATH, MEMORY_JOURNAL_PATH
 from nanobot.events import NO_EVENTS, CompactionReason, ContextCompactionEvent, EventSink
 from nanobot.llm_usage.context import llm_usage_source
@@ -78,6 +79,7 @@ class MemoryStore:
         self._dream_prompt_oversize_logged = False
         self._append_lock = threading.Lock()
         self.dream_lock = asyncio.Lock()
+        self.imports = MemoryImportStore(workspace)
         self._git = GitStore.for_memory(workspace)
         self._maybe_migrate_legacy_history()
 
@@ -529,6 +531,44 @@ class MemoryStore:
             count=len(pending), since_cursor=since_cursor, last_cursor=last_cursor,
         )
         return f"{self._dream_template()}\n\n{history_prompt}", last_cursor
+
+    def build_import_prompt(
+        self,
+        *,
+        import_id: str,
+        name: str,
+        content: str,
+    ) -> str:
+        """Build the dedicated Dream prompt for one imported document."""
+        import_prompt = render_template(
+            "agent/dream_import.md",
+            strip=True,
+            import_id=import_id,
+            display_name=name,
+            content=content,
+            completion_marker=self.import_completion_marker(import_id),
+        )
+        return f"{self._dream_template()}\n\n{import_prompt}"
+
+    @staticmethod
+    def import_completion_marker(import_id: str) -> str:
+        return f"DREAM-IMPORT-COMPLETE:{import_id}"
+
+    @classmethod
+    def dream_import_completed(
+        cls,
+        resp: object | None,
+        import_id: str,
+    ) -> bool:
+        """Require normal completion and the exact marker for this import."""
+        if not cls.dream_run_completed(resp):
+            return False
+        content = getattr(resp, "content", None)
+        if not isinstance(content, str):
+            return False
+        marker = cls.import_completion_marker(import_id)
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        return bool(lines) and lines[-1] == marker
 
     def dream_content_diff(self) -> str:
         """Structured summary of uncommitted changes to the durable memory files.

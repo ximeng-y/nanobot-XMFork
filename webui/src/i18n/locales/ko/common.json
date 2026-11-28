@@ -453,7 +453,8 @@
       "ariaLabel": "언어 변경"
     },
     "apps": "앱",
-    "automations": "자동화"
+    "automations": "자동화",
+    "memory": "메모리"
   },
   "settings": {
     "timezoneNoMatches": "일치하는 시간대가 없습니다.",
@@ -2663,6 +2664,68 @@
       "retry": "다시 시도",
       "cancel": "취소",
       "switchDirectory": "디렉터리 전환"
+    }
+  },
+  "memory": {
+    "title": "메모리",
+    "description": "현재 Agent의 상주 메모리와 Wiki를 보고, Markdown을 가져와 Dream이 정리하게 할 수 있습니다.",
+    "scope": "현재 Agent 작업 공간",
+    "refresh": "새로고침",
+    "refreshing": "새로고침 중…",
+    "tabs": {
+      "library": "라이브러리",
+      "imports": "가져오기 및 보관",
+      "ariaLabel": "메모리 보기"
+    },
+    "library": {
+      "resident": "상주 메모리",
+      "wiki": "Wiki",
+      "wikiIndex": "Wiki 홈",
+      "empty": "아직 메모리 파일이 없습니다.",
+      "loading": "메모리 불러오는 중…",
+      "loadError": "메모리를 불러올 수 없습니다.",
+      "documentLoading": "문서 불러오는 중…",
+      "documentError": "이 문서를 불러올 수 없습니다.",
+      "backToFiles": "파일",
+      "selectFile": "목록에서 파일을 선택하면 내용을 볼 수 있습니다.",
+      "linkUnavailable": "이 링크는 현재 메모리 라이브러리에 없습니다."
+    },
+    "imports": {
+      "dreamHint": "Dream이 가져온 파일을 자동으로 정리합니다. 채팅에서 /dream을 입력할 수도 있습니다.",
+      "chooseFiles": "Markdown 파일 선택",
+      "uploading": "업로드 중…",
+      "uploaded": "업로드됨",
+      "uploadFailed": "업로드 실패",
+      "maxSize": "파일당 최대 {{size}}.",
+      "uploadSummary": "{{succeeded}}개 업로드됨, {{failed}}개 실패.",
+      "status": {
+        "pending": "정리 대기",
+        "failed": "실패",
+        "archived": "보관됨"
+      },
+      "importedAt": "{{date}}에 가져옴",
+      "archivedAt": "{{date}}에 보관됨",
+      "preview": "원문 미리보기",
+      "delete": "삭제",
+      "previewTitle": "가져온 원문",
+      "previewLoading": "원문 불러오는 중…",
+      "previewError": "원문을 불러올 수 없습니다.",
+      "pending": "정리 대기",
+      "archived": "보관됨",
+      "emptyPending": "정리를 기다리는 파일이 없습니다.",
+      "emptyArchived": "보관된 가져오기 파일이 없습니다.",
+      "selectFile": "{{name}} 선택",
+      "deleteSelected": "선택 항목 삭제({{count}})",
+      "selectedCount": "{{count}}개 선택됨",
+      "clearSelection": "선택 해제",
+      "deleteConfirmTitle": "가져온 파일을 삭제할까요?",
+      "deleteConfirmDescription": "선택한 원문만 삭제합니다. 이미 기록된 메모리는 되돌리지 않습니다.",
+      "deleteSuccess": "{{count}}개 가져오기 파일을 삭제했습니다.",
+      "deletePartial": "{{deleted}}개를 삭제했고 {{failed}}개는 삭제하지 못했습니다.",
+      "deleteError": "선택한 가져오기 파일을 삭제할 수 없습니다.",
+      "deleteFailedItem": "{{name}} 파일이 삭제되지 않았습니다.",
+      "onlyMarkdown": ".md 파일만 가져올 수 있습니다.",
+      "tooLarge": "파일이 {{size}}보다 큽니다."
     }
   }
 }

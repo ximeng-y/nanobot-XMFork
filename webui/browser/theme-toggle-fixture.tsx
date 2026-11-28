@@ -66,7 +66,7 @@ function ThemeChatFixture({ theme, toggle }: { theme: "light" | "dark"; toggle: 
       <Sidebar sessions={sessions} activeKey={activeKey} onSelect={setActiveKey} loading={false}
         onNewChat={noop} onRequestDelete={noop} onTogglePin={noop} onRequestRename={async () => {}}
         onToggleArchive={noop} onToggleGroup={noop} onRequestRenameProject={noop} onNewChatInProject={noop}
-        onOpenSettings={noop} onOpenApps={noop} onOpenAutomations={noop}
+        onOpenSettings={noop} onOpenApps={noop} onOpenAutomations={noop} onOpenMemory={noop}
         onOpenSearch={noop} onToggleArchived={noop} />
     </aside>
     <div className="min-w-0 flex-1">

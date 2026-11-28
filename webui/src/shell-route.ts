@@ -5,7 +5,7 @@ export const RESTART_STARTED_KEY = "nanobot-webui.restartStartedAt";
 export const RESTART_ROUTE_KEY = "nanobot-webui.restartRoute";
 const RESTART_ROUTE_TTL_MS = 5 * 60 * 1000;
 
-export type ShellView = "chat" | "settings" | "apps" | "automations" | "remote";
+export type ShellView = "chat" | "settings" | "apps" | "automations" | "memory" | "remote";
 export type ShellRoute = {
   view: ShellView;
   activeKey: string | null;
@@ -49,7 +49,7 @@ export function shellViewForSettingsSection(section: SettingsSectionKey): ShellV
 }
 
 export function changesSettingsSurface(current: ShellRoute, next: ShellRoute): boolean {
-  return current.view !== "chat" && current.view !== "remote" &&
+  return current.view !== "chat" && current.view !== "memory" && current.view !== "remote" &&
     (current.view !== next.view || current.settingsSection !== next.settingsSection);
 }
 
@@ -129,6 +129,9 @@ export function readShellRoute(): ShellRoute {
   }
   if (path === "/automations") {
     return { view: "automations", activeKey, temporary, settingsSection: "automations" };
+  }
+  if (path === "/memory") {
+    return { view: "memory", activeKey, temporary, settingsSection: "overview" };
   }
   if (path === "/channels") {
     return { view: "apps", activeKey, temporary, settingsSection: "channels" };

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from packaging.version import InvalidVersion, Version
@@ -51,15 +51,24 @@ async def _github_tags() -> object:
     return json.loads(payload)
 
 
-async def _latest_fork_tag(channel: str) -> tuple[Version, str, str] | None:
-    payload = await _github_tags()
+def _github_tag_names(payload: object) -> list[str]:
+    """Validate GitHub's tag list before its names reach version parsing."""
     if not isinstance(payload, list):
         raise ValueError("GitHub returned an invalid release tag list")
-    candidates: list[tuple[Version, str, str]] = []
-    for item in payload:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+    names: list[str] = []
+    for item in cast(list[object], payload):
+        if not isinstance(item, dict):
             continue
-        tag = item["name"]
+        name = cast(dict[str, object], item).get("name")
+        if isinstance(name, str):
+            names.append(name)
+    return names
+
+
+async def _latest_fork_tag(channel: str) -> tuple[Version, str, str] | None:
+    tags = _github_tag_names(await _github_tags())
+    candidates: list[tuple[Version, str, str]] = []
+    for tag in tags:
         version = _release_version(tag)
         if version is None:
             continue

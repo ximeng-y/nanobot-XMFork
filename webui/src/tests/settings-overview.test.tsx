@@ -28,7 +28,8 @@ describe("Settings overview and appearance", () => {
           <AboutSettings settings={settingsPayload()} />
         </ClientProvider>,
       );
-      expect(await screen.findByRole("link", { name: "Installation guide" })).toBeVisible();
+      expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
+        .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(fetcher).toHaveBeenCalledWith("/api/settings/version-check", expect.any(Object));
       expect(screen.queryByRole("button", { name: /^Update$/ })).not.toBeInTheDocument();
@@ -58,7 +59,7 @@ describe("Settings overview and appearance", () => {
     expect(screen.getByRole("link", { name: "Release notes" })).toHaveAttribute("href",
       "https://github.com/ximeng-y/nanobot-XMFork/releases/tag/v0.3.7.dev2026101501");
     expect(requestUpdate).not.toHaveBeenCalled();
-    expect(screen.queryByRole("link", { name: "Installation guide" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Update instructions for your installation" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Update$/ }));
     expect(requestUpdate).toHaveBeenCalledTimes(1);
 

@@ -2166,7 +2166,8 @@ function Shell({
     onOpenUpdates: () => onOpenSettings("about"),
     availableUpdate: localActive && !isNativeRuntime(effectiveRuntimeSurface)
       && versionCheck.result?.type === "update" && versionCheck.result.latestVersion !== versionCheck.dismissedVersion
-      ? { version: versionCheck.result.latestVersion, onDismiss: versionCheck.dismiss, onRequestUpdate: updateFlow.open,
+      ? { version: versionCheck.result.latestVersion, onDismiss: versionCheck.dismiss,
+        onRequestUpdate: updateFlow.pending ? updateFlow.open : undefined,
         installationMethod: updateFlow.pending ? null : versionCheck.installationMethod }
       : undefined,
     onOpenApps,

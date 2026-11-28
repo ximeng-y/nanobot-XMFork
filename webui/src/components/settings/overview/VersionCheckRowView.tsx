@@ -9,6 +9,7 @@ import type { ReleaseStatus, UpdateChannel, UpdateMethod } from "@/lib/api";
 import type { VersionResult } from "@/providers/VersionCheckProvider";
 
 const REPOSITORY_URL = "https://github.com/ximeng-y/nanobot-XMFork";
+const UPDATE_GUIDE_URL = `${REPOSITORY_URL}/blob/main/docs/updating.md#installation-owners`;
 
 export type VersionInfoProps = {
   currentVersion?: string;
@@ -85,8 +86,8 @@ export function VersionCheckRowView({
                 ? t("updates.guide.entry", { method: t(`updates.guide.methods.${installationMethod}`) })
                 : t("settings.about.updateNow")}
             </Button> : <Button size="sm" variant="outline" className={actionClass} asChild>
-              <a href={`${REPOSITORY_URL}#-install`} target="_blank" rel="noopener noreferrer">
-                {t("settings.about.installationGuide")}<ExternalLink className="ms-1.5 h-3 w-3 shrink-0" aria-hidden />
+              <a href={UPDATE_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+                {t("updates.ownerGuide")}<ExternalLink className="ms-1.5 h-3 w-3 shrink-0" aria-hidden />
               </a>
             </Button>}
             {available.releaseUrl || available.pypiUrl ? (

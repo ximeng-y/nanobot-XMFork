@@ -14,17 +14,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 const client = new NanobotClient({ url: "ws://localhost:8765" });
 const available = (version = "0.3.6") => ({ updateAvailable: { currentVersion: "0.3.5", latestVersion: version } });
 
-it.each([
-  ["uv", "Update via uv"], ["pipx", "Update via pipx"], ["pip", "Update via pip"],
-  ["source", "Update via source checkout"], ["container", "Update via container deployment"],
-  ["managed", "Update"], ["future-owner", "Update"],
-])("labels the update entry with the detected owner (%s)", async (method, label) => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ ...available(), installation_method: method })));
+it("routes detected Fork updates to installation-owner guidance", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ ...available(), installation_method: "uv" })));
   const request = vi.fn();
   render(<ClientProvider token="test" client={client}><AboutSettings settings={settingsPayload()} onRequestUpdate={request} /></ClientProvider>);
-  const entry = await screen.findByRole("button", { name: label });
-  fireEvent.click(entry);
-  expect(request).toHaveBeenCalledOnce();
+  const guide = await screen.findByRole("link", { name: "Update instructions for your installation" });
+  expect(guide).toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
+  expect(screen.queryByRole("button", { name: /^Update$/ })).toBeNull();
+  expect(request).not.toHaveBeenCalled();
 });
 
 function Surface() {
@@ -43,7 +40,7 @@ function Surface() {
 const view = (token = "host-a") => <ClientProvider client={client} token={token}><Surface /></ClientProvider>;
 
 describe("Sidebar update entry", () => {
-  it("keeps About update actions available after dismissing the sidebar notice", async () => {
+  it("keeps About update guidance available after dismissing the sidebar notice", async () => {
     const fetcher = vi.fn(async () => jsonResponse(available()));
     vi.stubGlobal("fetch", fetcher);
     const { rerender } = render(view("dismiss-sidebar"));
@@ -54,7 +51,8 @@ describe("Sidebar update entry", () => {
       <Surface />
       <AboutSettings settings={settingsPayload()} onRequestUpdate={vi.fn()} />
     </ClientProvider>);
-    expect(await screen.findByRole("button", { name: /^Update$/ })).toBeVisible();
+    expect(await screen.findByRole("link", { name: "Update instructions for your installation" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Update$/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Update available v0.3.6" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Dismiss update notice" })).toBeNull();
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -90,9 +88,9 @@ describe("Sidebar update entry", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Checking...");
     expect(fetcher).toHaveBeenCalledTimes(4);
     await act(async () => resolve(jsonResponse(available())));
-    expect(screen.getByRole("link", { name: "Installation guide" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Update instructions for your installation" })).toBeVisible();
   });
-  it("opens the provided update confirmation directly without navigating through details", () => {
+  it("opens a saved update confirmation directly without navigating through details", () => {
     const openDetails = vi.fn();
     const requestUpdate = vi.fn();
     render(<UpdateNotice version="0.3.6" onOpen={openDetails} onDismiss={vi.fn()} onRequestUpdate={requestUpdate} />);
@@ -103,19 +101,6 @@ describe("Sidebar update entry", () => {
     expect(screen.queryByRole("button", { name: "View details" })).toBeNull();
   });
 
-  it("uses the same direct confirmation in About when an update action is available", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(available())));
-    const requestUpdate = vi.fn();
-    render(<ClientProvider client={client} token="about-update">
-      <AboutSettings settings={{ ...settingsPayload(), version: { current: "0.3.5" } }} onRequestUpdate={requestUpdate} />
-    </ClientProvider>);
-    const button = await screen.findByRole("button", { name: /^Update$/ });
-    expect(screen.queryByRole("link", { name: "Installation guide" })).toBeNull();
-    expect(requestUpdate).not.toHaveBeenCalled();
-    fireEvent.click(button);
-    expect(requestUpdate).toHaveBeenCalledOnce();
-  });
-
   it("opens in place, preserves the draft, and navigates only from View details", async () => {
     const fetcher = vi.fn(async () => jsonResponse(available()));
     vi.stubGlobal("fetch", fetcher);
@@ -124,14 +109,15 @@ describe("Sidebar update entry", () => {
     fireEvent.click(screen.getByText("Refresh version"));
     fireEvent.click(await screen.findByRole("button", { name: "Update available v0.3.6" }));
     expect(screen.getByRole("dialog", { name: "Update available v0.3.6" })).toBeVisible();
-    expect(screen.queryByRole("link", { name: "Installation guide" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Update instructions for your installation" })).toBeNull();
     expect(screen.getByLabelText("Draft")).toHaveValue("Keep writing");
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByRole("button", { name: "Update available v0.3.6" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Update available v0.3.6" }));
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
-    expect(await screen.findByRole("link", { name: "Installation guide" })).toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork#-install");
+    expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
+      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher).toHaveBeenCalledWith("/api/settings/version-check", expect.any(Object));
   });

@@ -1088,6 +1088,15 @@ export async function fetchSettingsUsage(
 }
 
 export type UpdateChannel = "stable" | "preview";
+export type ForkUpdateTarget = { tag: string; commit: string };
+export function startForkUpdate(client: WebUIMutationTransport, target: ForkUpdateTarget, revision: number) {
+  return mutation<{ version: string }>(client, "settings.nanobot.update.fork", { ...target, revision }, 90_000);
+}
+export function readForkUpdate(token: string) {
+  return request<{ runningVersion: string; last: (ForkUpdateTarget & { phase: "installing" | "restarting" | "failed" }) | null }>(
+    "/api/settings/nanobot-update/fork/status", token, undefined, 5_000,
+  );
+}
 export interface ReleaseStatus {
   channel: UpdateChannel;
   revision: number;
@@ -1095,6 +1104,7 @@ export interface ReleaseStatus {
   state: "available" | "current" | "ahead" | "waiting_stable" | "withdrawn" | "unavailable" | "publishing" | "unsupported";
 }
 export interface VersionCheckResult {
+  forkTarget?: ForkUpdateTarget;
   installation_method?: UpdateMethod | null;
   releaseStatus?: ReleaseStatus;
   can_change_channel?: boolean;

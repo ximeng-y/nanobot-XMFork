@@ -1,31 +1,18 @@
 from __future__ import annotations
 
 import json
-import re
+from dataclasses import asdict
 from typing import Any, cast
 
 import httpx
-from packaging.version import InvalidVersion, Version
+from packaging.version import Version
 
 import nanobot
-from nanobot.repository import TAGS_URL, release_url
+from nanobot.repository import TAGS_URL, ForkTarget, fork_version, release_url
 from nanobot.security.network import PinnedDNSAsyncTransport
 from nanobot.update_channel import read_update_channel
 
 _MAX_TAGS_RESPONSE = 256 * 1024
-_FORK_TAG = re.compile(r"^v(?P<public>\d+\.\d+\.\d+(?:\.(?:dev|post)\d+)?)-xm\.(?P<build>\d+)$")
-
-
-def _release_version(tag: str) -> str | None:
-    """Map the Fork's Git tag spelling to its PEP 440 package version."""
-    match = _FORK_TAG.fullmatch(tag)
-    if match is None:
-        return None
-    value = f"{match.group('public')}+xm.{match.group('build')}"
-    try:
-        return str(Version(value))
-    except InvalidVersion:
-        return None
 
 
 async def _github_tags() -> object:
@@ -51,32 +38,26 @@ async def _github_tags() -> object:
     return json.loads(payload)
 
 
-def _github_tag_names(payload: object) -> list[str]:
-    """Validate GitHub's tag list before its names reach version parsing."""
+def _github_targets(payload: object) -> list[ForkTarget]:
     if not isinstance(payload, list):
         raise ValueError("GitHub returned an invalid release tag list")
-    names: list[str] = []
+    targets: list[ForkTarget] = []
     for item in cast(list[object], payload):
         if not isinstance(item, dict):
             continue
-        name = cast(dict[str, object], item).get("name")
-        if isinstance(name, str):
-            names.append(name)
-    return names
+        fields = cast(dict[str, object], item)
+        name, commit = fields.get("name"), fields.get("commit")
+        if isinstance(name, str) and fork_version(name) and isinstance(commit, dict):
+            sha = cast(dict[str, object], commit).get("sha")
+            if isinstance(sha, str):
+                targets.append(ForkTarget(name, sha))
+    return targets
 
 
-async def _latest_fork_tag(channel: str) -> tuple[Version, str, str] | None:
-    tags = _github_tag_names(await _github_tags())
-    candidates: list[tuple[Version, str, str]] = []
-    for tag in tags:
-        version = _release_version(tag)
-        if version is None:
-            continue
-        parsed = Version(version)
-        if channel == "stable" and parsed.is_prerelease:
-            continue
-        candidates.append((parsed, version, tag))
-    return max(candidates, key=lambda item: item[0], default=None)
+async def _latest_fork_tag(channel: str) -> ForkTarget | None:
+    targets = _github_targets(await _github_tags())
+    eligible = (t for t in targets if channel != "stable" or not Version(t.version).is_prerelease)
+    return max(eligible, key=lambda t: Version(t.version), default=None)
 
 
 async def check_for_update() -> dict[str, Any]:
@@ -90,16 +71,17 @@ async def check_for_update() -> dict[str, Any]:
     result: dict[str, Any] = {"updateAvailable": None, "releaseStatus": status}
     try:
         latest = await _latest_fork_tag(selection.channel)
-        if latest is not None and latest[0] > Version(current):
+        if latest is not None and Version(latest.version) > Version(current):
+            result["forkTarget"] = asdict(latest)
             result["updateAvailable"] = {
-                "currentVersion": current, "latestVersion": latest[1],
-                "releaseUrl": release_url(latest[2]),
+                "currentVersion": current, "latestVersion": latest.version,
+                "releaseUrl": release_url(latest.tag),
             }
             status["state"] = "available"
         elif latest is not None:
             status["state"] = (
                 "waiting_stable" if selection.channel == "stable" and Version(current).is_prerelease
-                else "ahead" if Version(current) > latest[0] else "current"
+                else "ahead" if Version(current) > Version(latest.version) else "current"
             )
     except (httpx.HTTPError, ValueError, OSError):
         status["state"] = "unavailable"

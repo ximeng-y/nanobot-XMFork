@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 
 from nanobot.cli.process_identity import set_cli_process_identity
 from nanobot.installation_lock import InstallationBusyError, installation_access
@@ -97,8 +97,13 @@ def main() -> None:
         # These commands still take a lease and cannot run during a live install.
         diagnostics = args[:1] in (["--help"], ["-h"], ["--version"], ["-v"])
         stop_or_inspect = args[:2] in (["gateway", "stop"], ["gateway", "status"], ["gateway", "logs"])
-        with installation_access(allow_incomplete=diagnostics or stop_or_inspect):
-            _dispatch()
+        with ExitStack() as after_exit:
+            with installation_access(allow_incomplete=diagnostics or stop_or_inspect):
+                if args[:1] in (["gateway"], ["webui"]) and not stop_or_inspect:
+                    from nanobot.fork_update import launcher
+
+                    after_exit.enter_context(launcher(args[0]))
+                _dispatch()
     except InstallationBusyError as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(1) from exc

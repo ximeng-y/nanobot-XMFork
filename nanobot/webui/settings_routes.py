@@ -137,6 +137,8 @@ _SETTINGS_ROUTES = {
     "/api/settings/pairing/deny": _SettingsRoute("system", "pairing-deny", "settings.pairing.deny"),
     "/api/settings/mcp-presets": _SettingsRoute("system", "mcp-list"),
     "/api/settings/version-check": _SettingsRoute("system", "version-check"),
+    "/api/settings/nanobot-update/fork": _SettingsRoute("system", "update-fork", "settings.nanobot.update.fork"),
+    "/api/settings/nanobot-update/fork/status": _SettingsRoute("system", "update-fork-status"),
     "/api/settings/nanobot-update/channel": _SettingsRoute("system", "update-channel", "settings.nanobot.update.channel"),
     "/api/settings/nanobot-update/plan": _SettingsRoute("system", "update-plan-read"),
     "/api/settings/nanobot-update/plan/create": _SettingsRoute("system", "update-plan-create", "settings.nanobot.update.plan"),
@@ -164,7 +166,7 @@ _CHANNEL_CONNECT_WS = {f"settings.channel.connect.{action}": action for action i
 _CHANNEL_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _LOCAL_BROWSER_ACTIONS = frozenset({
     "runtime-config-update", "features-enable", "channel-configure", "channel-connect",
-    "update-channel", "version-check", "update-plan-create", "update-plan-read",
+    "update-channel", "version-check", "update-plan-create", "update-plan-read", "update-fork",
     "update-job-prepare", "update-job-settle", "update-job-execute", "update-job-retry",
 })
 

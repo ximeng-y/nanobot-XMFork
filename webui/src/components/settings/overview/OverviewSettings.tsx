@@ -133,7 +133,7 @@ export function OverviewSettings({
 export function AboutSettings({ settings, onRequestUpdate: requestUpdate }: { settings: SettingsPayload; onRequestUpdate?: () => void }) {
   const hostPicker = useContext(HostNavigationContext);
   const flow = useUpdateFlow();
-  // Fork tag results do not enter the signed ReleaseFeed; only a saved job can reopen the flow.
+  // A saved package update retains its own review; new Fork updates use the exact tag action.
   const onRequestUpdate = flow.pending ? requestUpdate ?? flow.open : undefined;
   const currentVersion = settings.version?.current;
   const currentCommit = settings.version?.commit;
@@ -165,13 +165,13 @@ export function AboutSettings({ settings, onRequestUpdate: requestUpdate }: { se
 
 function VersionCheckRow({ currentVersion, currentCommit, onRequestUpdate, hasPendingUpdate }: VersionInfoProps) {
   const { checking, result, check, releaseStatus, canChangeChannel,
-    changingChannel, channelError, changeChannel, installationMethod } = useVersionCheck();
+    changingChannel, channelError, changeChannel, installationMethod, forkUpdate } = useVersionCheck();
   useEffect(() => { void check(); }, [check]);
 
   return <VersionCheckRowView currentVersion={currentVersion} currentCommit={currentCommit}
     checking={checking} result={result} onCheck={() => void check()}
     onRequestUpdate={onRequestUpdate} hasPendingUpdate={hasPendingUpdate}
-    installationMethod={installationMethod}
+    installationMethod={installationMethod} forkUpdate={forkUpdate}
     releaseStatus={releaseStatus} canChangeChannel={canChangeChannel} changingChannel={changingChannel}
     channelError={channelError} onChangeChannel={changeChannel} />;
 }

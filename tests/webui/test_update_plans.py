@@ -49,6 +49,45 @@ RETRY = "settings.nanobot.update.retry"
 CHANNEL = "settings.nanobot.update.channel"
 
 
+@pytest.mark.parametrize("lifetime", ["explicit", "on_demand"])
+async def test_fork_mutation_hands_displayed_target_to_original_launcher(review_gateway, monkeypatch, lifetime):
+    from contextlib import ExitStack
+    from unittest.mock import Mock
+
+    from nanobot import fork_update, update_profiles
+    from nanobot.repository import ForkTarget
+
+    gateway = review_gateway.gateway()
+    receipt = review_gateway.observed[0].receipt
+    receipt = receipt.model_copy(update={"launch": receipt.launch.model_copy(update={"lifetime": lifetime})})
+    target = ForkTarget("v0.4.3-xm.2", "b" * 40)
+    payload = {"tag": target.tag, "commit": target.commit, "revision": 0}
+    verified, finished = Mock(), Mock()
+    monkeypatch.setattr(fork_update, "prepare_fork_target", verified)
+    monkeypatch.setattr(fork_update, "fork_source_root", lambda: Path.cwd())
+    monkeypatch.setattr(update_profiles, "inspect_profiles", lambda _: review_gateway.observed)
+    monkeypatch.setattr(fork_update, "_finish", finished)
+    stop = asyncio.Event()
+    admission = gateway.http.bus.admission
+    with fork_update.launcher("webui" if lifetime == "on_demand" else "gateway"), ExitStack() as gates:
+        fork_update.bind_gateway(fork_update.GatewayHandoff(
+            receipt, stop.set, lambda: admission.pause_if_idle(lambda: False), gates,
+        ))
+        action = "settings.nanobot.update.fork"
+        denied = await gateway.http.dispatch_webui_mutation(connection(), action, payload)
+        assert denied.status_code == 403
+        verified.assert_not_called()
+        with admission.activity():
+            busy = await gateway.http.dispatch_webui_mutation(connection(local=True), action, payload)
+            assert busy.status_code == 409 and not stop.is_set()
+        accepted = await gateway.http.dispatch_webui_mutation(connection(local=True), action, payload)
+        assert accepted.status_code == 200 and accepted.result == {"version": target.version}
+        verified.assert_called_with(target)
+        await asyncio.wait_for(stop.wait(), 2)
+        assert admission.paused
+    finished.assert_called_once_with(target, lifetime == "explicit")
+
+
 async def test_channel_mutation_preserves_authority_and_invalidates_old_reviews(preparation_gateway):
     from nanobot.update_channel import read_update_channel
 

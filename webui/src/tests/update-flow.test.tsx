@@ -1,7 +1,8 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "@/lib/api";
+import { useForkUpdate } from "@/hooks/useForkUpdate";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import type { NanobotClient } from "@/lib/nanobot-client";
 import type { ConnectionStatus } from "@/lib/types";
@@ -13,6 +14,7 @@ import { settingsPayload } from "@/tests/settings-test-utils";
 vi.mock("@/lib/api", async (original) => ({
   ...await original<typeof api>(), createUpdateReview: vi.fn(), readUpdateReview: vi.fn(),
   readUpdateJob: vi.fn(), prepareUpdate: vi.fn(), executeUpdate: vi.fn(), settleUpdate: vi.fn(), checkVersion: vi.fn(), fetchSettings: vi.fn(),
+  readForkUpdate: vi.fn(),
 }));
 vi.mock("@/lib/clipboard", () => ({ copyTextToClipboard: vi.fn() }));
 const id = "71c91a73-842e-42e9-aeb4-61a5bfe51135";
@@ -56,6 +58,38 @@ beforeEach(() => {
 afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); });
 
 describe("Real update consent and recovery", () => {
+  it("keeps following the exact Fork update with the new gateway credential without installing again", async () => {
+    vi.useFakeTimers();
+    const target = { tag: "v0.4.2-xm.3", commit: "a".repeat(40) };
+    const transport = { requestMutation: vi.fn().mockResolvedValue({ version: "0.4.2+xm.3" }) };
+    vi.mocked(api.readForkUpdate)
+      .mockResolvedValueOnce({ runningVersion: "0.4.2+xm.2", last: { ...target, phase: "restarting" } })
+      .mockResolvedValueOnce({ runningVersion: "0.4.2+xm.2", last: { ...target, phase: "failed" } });
+    const mounted = renderHook(({ token }) => useForkUpdate(transport, token), { initialProps: { token: "before" } });
+    await act(() => mounted.result.current.apply(target, "0.4.2+xm.3", 0));
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(mounted.result.current.busy).toBe(true);
+    mounted.rerender({ token: "after" });
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    expect(api.readForkUpdate).toHaveBeenLastCalledWith("after");
+    expect(mounted.result.current.error).toBe("Update did not finish");
+    expect(transport.requestMutation).toHaveBeenCalledTimes(1);
+  });
+  it("sends the displayed Fork tag and commit with one click", async () => {
+    const target = { tag: "v0.4.2-xm.3", commit: "a".repeat(40) };
+    const forkClient = { ...client, requestMutation: vi.fn().mockResolvedValue({ version: "0.4.2+xm.3" }) };
+    vi.mocked(api.checkVersion).mockResolvedValue({ forkTarget: target,
+      releaseStatus: { state: "available", currentVersion: "0.4.2+xm.2", channel: "stable", revision: 7 },
+      updateAvailable: { currentVersion: "0.4.2+xm.2", latestVersion: "0.4.2+xm.3" } });
+    render(<ClientProvider client={forkClient as unknown as NanobotClient} token="fork-gateway"
+      webuiCapabilities={["webui.update-channels.v1", "webui.update-flow.v1"]}>
+      <AboutSettings settings={settingsPayload()} /></ClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: "Update & restart" }));
+    expect(forkClient.requestMutation).toHaveBeenCalledTimes(1);
+    expect(forkClient.requestMutation).toHaveBeenCalledWith("settings.nanobot.update.fork",
+      { ...target, revision: 7 }, expect.any(Number));
+    expect(await screen.findByRole("button", { name: "Reconnecting…" })).toBeDisabled();
+  });
   it("keeps a Fork tag update out of the signed review flow", async () => {
     vi.mocked(api.checkVersion).mockResolvedValue({ installation_method: "managed",
       updateAvailable: { currentVersion: "0.3.5", latestVersion: "0.3.6" } });

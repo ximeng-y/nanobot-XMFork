@@ -9,7 +9,7 @@ import type { ReleaseStatus, UpdateChannel, UpdateMethod } from "@/lib/api";
 import type { VersionResult } from "@/providers/VersionCheckProvider";
 
 const REPOSITORY_URL = "https://github.com/ximeng-y/nanobot-XMFork";
-const UPDATE_GUIDE_URL = `${REPOSITORY_URL}/blob/main/docs/updating.md#installation-owners`;
+const UPDATE_GUIDE_URL = `${REPOSITORY_URL}/blob/main/docs/fork-updating.md`;
 
 export type VersionInfoProps = {
   currentVersion?: string;

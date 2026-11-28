@@ -63,7 +63,7 @@ describe("Real update consent and recovery", () => {
       <AboutSettings settings={settingsPayload()} />
     </ClientProvider>);
     expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
-      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
+      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/fork-updating.md");
     expect(screen.queryByRole("button", { name: /^Update$/ })).toBeNull();
     expect(api.checkVersion).toHaveBeenCalledOnce();
     expect(api.createUpdateReview).not.toHaveBeenCalled();

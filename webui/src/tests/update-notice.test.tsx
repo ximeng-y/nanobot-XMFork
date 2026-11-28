@@ -19,7 +19,7 @@ it("routes detected Fork updates to installation-owner guidance", async () => {
   const request = vi.fn();
   render(<ClientProvider token="test" client={client}><AboutSettings settings={settingsPayload()} onRequestUpdate={request} /></ClientProvider>);
   const guide = await screen.findByRole("link", { name: "Update instructions for your installation" });
-  expect(guide).toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
+  expect(guide).toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/fork-updating.md");
   expect(screen.queryByRole("button", { name: /^Update$/ })).toBeNull();
   expect(request).not.toHaveBeenCalled();
 });
@@ -117,7 +117,7 @@ describe("Sidebar update entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update available v0.3.6" }));
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
-      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
+      .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/fork-updating.md");
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher).toHaveBeenCalledWith("/api/settings/version-check", expect.any(Object));
   });

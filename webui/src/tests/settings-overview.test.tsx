@@ -29,7 +29,7 @@ describe("Settings overview and appearance", () => {
         </ClientProvider>,
       );
       expect(await screen.findByRole("link", { name: "Update instructions for your installation" }))
-        .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/updating.md#installation-owners");
+        .toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork/blob/main/docs/fork-updating.md");
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(fetcher).toHaveBeenCalledWith("/api/settings/version-check", expect.any(Object));
       expect(screen.queryByRole("button", { name: /^Update$/ })).not.toBeInTheDocument();

@@ -131,7 +131,7 @@ describe("Sidebar update entry", () => {
     expect(screen.getByRole("button", { name: "Update available v0.3.6" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Update available v0.3.6" }));
     fireEvent.click(screen.getByRole("button", { name: "View details" }));
-    expect(await screen.findByRole("link", { name: "Installation guide" })).toHaveAttribute("href", "https://github.com/HKUDS/nanobot#-install");
+    expect(await screen.findByRole("link", { name: "Installation guide" })).toHaveAttribute("href", "https://github.com/ximeng-y/nanobot-XMFork#-install");
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(fetcher).toHaveBeenCalledWith("/api/settings/version-check", expect.any(Object));
   });

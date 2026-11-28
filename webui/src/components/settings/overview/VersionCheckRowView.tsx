@@ -8,6 +8,8 @@ import { ToggleButton } from "@/components/ui/toggle-button";
 import type { ReleaseStatus, UpdateChannel, UpdateMethod } from "@/lib/api";
 import type { VersionResult } from "@/providers/VersionCheckProvider";
 
+const REPOSITORY_URL = "https://github.com/ximeng-y/nanobot-XMFork";
+
 export type VersionInfoProps = {
   currentVersion?: string;
   currentCommit?: string | null;
@@ -45,7 +47,7 @@ export function VersionCheckRowView({
             {currentVersion ? `v${currentVersion}` : "nanobot"}
             {currentCommit && <>
               <span aria-hidden> (</span>
-              <a href={`https://github.com/HKUDS/nanobot/commit/${currentCommit}`}
+              <a href={`${REPOSITORY_URL}/commit/${currentCommit}`}
                 target="_blank" rel="noopener noreferrer" title={currentCommit}
                 className="font-mono hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {currentCommit.slice(0, 7)}
@@ -83,7 +85,7 @@ export function VersionCheckRowView({
                 ? t("updates.guide.entry", { method: t(`updates.guide.methods.${installationMethod}`) })
                 : t("settings.about.updateNow")}
             </Button> : <Button size="sm" variant="outline" className={actionClass} asChild>
-              <a href="https://github.com/HKUDS/nanobot#-install" target="_blank" rel="noopener noreferrer">
+              <a href={`${REPOSITORY_URL}#-install`} target="_blank" rel="noopener noreferrer">
                 {t("settings.about.installationGuide")}<ExternalLink className="ms-1.5 h-3 w-3 shrink-0" aria-hidden />
               </a>
             </Button>}

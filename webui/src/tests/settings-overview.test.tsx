@@ -53,10 +53,10 @@ describe("Settings overview and appearance", () => {
       onRequestUpdate: requestUpdate };
     const { rerender } = render(<VersionCheckRowView {...props}
       result={{ type: "update", latestVersion: "0.3.7.dev2026101501",
-        releaseUrl: "https://github.com/HKUDS/nanobot/releases/tag/v0.3.7.dev2026101501" }} />);
+        releaseUrl: "https://github.com/ximeng-y/nanobot-XMFork/releases/tag/v0.3.7.dev2026101501" }} />);
     expect(screen.getByText("v0.3.7.dev2026101501")).toBeVisible();
     expect(screen.getByRole("link", { name: "Release notes" })).toHaveAttribute("href",
-      "https://github.com/HKUDS/nanobot/releases/tag/v0.3.7.dev2026101501");
+      "https://github.com/ximeng-y/nanobot-XMFork/releases/tag/v0.3.7.dev2026101501");
     expect(requestUpdate).not.toHaveBeenCalled();
     expect(screen.queryByRole("link", { name: "Installation guide" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Update$/ }));
@@ -118,7 +118,7 @@ describe("Settings overview and appearance", () => {
     });
     expect(screen.getByText("v0.3.5")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "abcdef1" });
-    expect(link).toHaveAttribute("href", `https://github.com/HKUDS/nanobot/commit/${commit}`);
+    expect(link).toHaveAttribute("href", `https://github.com/ximeng-y/nanobot-XMFork/commit/${commit}`);
     expect(link).toHaveAttribute("title", commit);
     const reportUrl = new URL(screen.getByRole("link", { name: "Report an issue" }).getAttribute("href")!);
     expect(reportUrl.origin + reportUrl.pathname).toBe("https://github.com/HKUDS/nanobot/issues/new");

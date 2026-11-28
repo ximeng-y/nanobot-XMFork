@@ -26,8 +26,9 @@ from nanobot.installation_lock import (
     installation_id,
     pending_update_path,
 )
+from nanobot.repository import SOURCE_URL
 
-_SOURCE_URL = "https://github.com/HKUDS/nanobot.git"
+_SOURCE_URL = SOURCE_URL
 
 
 class UpdateError(RuntimeError):
